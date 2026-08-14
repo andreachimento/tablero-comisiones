@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/dashboard-data.js": {
+      "maxDuration": 60
+    }
+  }
+}
