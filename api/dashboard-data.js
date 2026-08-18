@@ -14,7 +14,10 @@
 // haciendo fetch('/api/dashboard-data') y recibe el JSON con las comisiones.
 // ============================================================================
 
-const START_TO_MONTHS_AHEAD = 4; // meses hacia adelante de comisiones NOT_STARTED a traer
+// Rango de comisiones NOT_STARTED a traer (ambas fechas fijas). Cuando quieras
+// otro rango, pedile a Claude que las cambie.
+const START_DATE_FROM = '2026-08-18';
+const START_DATE_TO = '2027-03-01';
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
 const TZ = 'America/Argentina/Buenos_Aires';
 
@@ -42,12 +45,6 @@ function todayISO() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: TZ }); // yyyy-MM-dd
 }
 
-function addMonthsISO(months) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + Math.floor(months));
-  return d.toLocaleDateString('sv-SE', { timeZone: TZ });
-}
-
 function fmtDate(dateObj, opts) {
   return new Intl.DateTimeFormat('es-AR', { timeZone: TZ, ...opts }).format(dateObj);
 }
@@ -68,8 +65,8 @@ function timeHM(dateObj) {
 }
 
 async function fetchAllCohorts(env) {
-  const from = todayISO();
-  const to = addMonthsISO(START_TO_MONTHS_AHEAD);
+  const from = START_DATE_FROM;
+  const to = START_DATE_TO;
   const qs = `status=NOT_STARTED&startDateFrom=${from}&startDateTo=${to}&limit=100`;
   const first = await apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts?${qs}&page=1`, env.STUDENT_KEY);
   let all = (first.data || []).slice();
