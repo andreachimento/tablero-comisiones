@@ -4,7 +4,7 @@
       "maxDuration": 60
     },
     "api/staff-list.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/staff-profile.js": {
       "maxDuration": 30
