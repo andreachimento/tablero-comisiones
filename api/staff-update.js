@@ -55,6 +55,31 @@ module.exports = async function handler(req, res) {
         });
         break;
       }
+      case 'editComentario': {
+        const index = Number(payload.index);
+        const texto = String(payload.texto || '').trim();
+        if (!texto) {
+          res.status(400).json({ error: 'El comentario no puede quedar vacio' });
+          return;
+        }
+        if (!Number.isInteger(index) || index < 0 || index >= overlay.comentarios.length) {
+          res.status(400).json({ error: 'No se encontro ese comentario' });
+          return;
+        }
+        overlay.comentarios[index].texto = texto;
+        overlay.comentarios[index].editado = true;
+        overlay.comentarios[index].fechaEdicion = new Date().toISOString();
+        break;
+      }
+      case 'deleteComentario': {
+        const index = Number(payload.index);
+        if (!Number.isInteger(index) || index < 0 || index >= overlay.comentarios.length) {
+          res.status(400).json({ error: 'No se encontro ese comentario' });
+          return;
+        }
+        overlay.comentarios.splice(index, 1);
+        break;
+      }
       case 'addCurso': {
         const curso = String(payload.curso || '').trim();
         const rol = payload.rol;
