@@ -11,6 +11,9 @@
     },
     "api/staff-update.js": {
       "maxDuration": 10
+    },
+    "api/admin-seed-staff.js": {
+      "maxDuration": 30
     }
   }
 }
