@@ -2,5 +2,8 @@
   "name": "tablero-comisiones-coderhouse",
   "version": "1.0.0",
   "private": true,
-  "description": "Tablero de comisiones de Coderhouse (Vercel)"
+  "description": "Tablero de comisiones de Coderhouse (Vercel)",
+  "dependencies": {
+    "@upstash/redis": "^1.38.2"
+  }
 }
