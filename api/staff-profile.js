@@ -5,14 +5,23 @@
 // (estado, comentarios, cursos habilitados, rating) + su historial de
 // comisiones EN VIVO.
 //
+// PERFILES UNIFICADOS: una misma persona puede tener varias cuentas en el
+// back office (mismo mail base, distinto "+tag"). El listado (staff-list.js)
+// ya arma y guarda un indice de que cuentas le pertenecen a cada mail base
+// (personKey); aca lo leemos para traer el historial de TODAS esas cuentas
+// juntas. Si todavia no hay indice guardado (por ejemplo la primera vez que
+// se abre un perfil despues de desplegar esto, antes de haber cargado el
+// listado una vez), probamos directamente el mail pedido como si fuera una
+// sola cuenta, igual que antes.
+//
 // La clave de por que esto es rapido aunque haya miles de asignaciones en
-// toda la plataforma: le pedimos a Coderhouse solo las asignaciones de ESTE
-// usuario puntual (?userId=...), no todas. Asi el perfil siempre refleja al
-// instante si se lo asigno o se lo bajo de una comision, sin tener que
-// recorrer datos de las 700+ personas del back office.
+// toda la plataforma: le pedimos a Coderhouse solo las asignaciones de la(s)
+// cuenta(s) puntuales de esta persona (?userId=...), no todas. Asi el perfil
+// siempre refleja al instante si se lo asigno o se lo bajo de una comision,
+// sin tener que recorrer datos de las 700+ personas del back office.
 // ============================================================================
 
-const { getOverlay, defaultOverlay } = require('../lib/overlay');
+const { getOverlay, defaultOverlay, personKey, getAccountsForPerson } = require('../lib/overlay');
 
 const TZ = 'America/Argentina/Buenos_Aires';
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
@@ -54,10 +63,27 @@ function dateISO(dateObj) {
   return dateObj.toLocaleDateString('sv-SE', { timeZone: TZ });
 }
 
+// Todas las asignaciones (en cualquier estado de fecha) de UNA cuenta
+// puntual (?userId=...).
+async function fetchAssignmentsForAccount(env, userId) {
+  const first = await apiGet(env.BASE, `/platform/staff/m2m/admin/assignments?userId=${userId}&page=1&limit=100`, env.STUDENT_KEY);
+  let assignments = (first.items || []).slice();
+  const totalPages = Math.min(first.totalPages || 1, 20);
+  if (totalPages > 1) {
+    const proms = [];
+    for (let p = 2; p <= totalPages; p++) {
+      proms.push(apiGet(env.BASE, `/platform/staff/m2m/admin/assignments?userId=${userId}&page=${p}&limit=100`, env.STUDENT_KEY));
+    }
+    (await Promise.all(proms)).forEach(d => { assignments = assignments.concat(d.items || []); });
+  }
+  return assignments;
+}
+
 module.exports = async function handler(req, res) {
   try {
-    const email = String((req.query && req.query.email) || '').toLowerCase().trim();
-    if (!email) { res.status(200).json({ error: 'Falta el parametro email' }); return; }
+    const rawEmail = String((req.query && req.query.email) || '').toLowerCase().trim();
+    if (!rawEmail) { res.status(200).json({ error: 'Falta el parametro email' }); return; }
+    const email = personKey(rawEmail);
 
     const env = getEnv();
     let overlay;
@@ -69,30 +95,49 @@ module.exports = async function handler(req, res) {
       overlay = defaultOverlay();
     }
 
-    // Buscamos si existe una cuenta REAL de instructor en el back office con
-    // este mail. Ojo: aunque haya una cuenta de otro tipo (ej. estudiante),
-    // solo cuenta como "perfil real" si es INSTRUCTOR - si no, se trata igual
-    // como perfil "extraido de Dash".
-    let backofficeUser = null;
+    // Cuentas reales del back office que pertenecen a esta persona. OJO: el
+    // campo "role" de una cuenta NO es confiable para saber si da clases de
+    // verdad - se encontraron cuentas con asignaciones reales y activas cuyo
+    // "role" plano dice "STUDENT" (o directamente null), mientras que el
+    // dato correcto vive en publicMetadata.role. Por eso ya no filtramos por
+    // role: si la cuenta existe (esta en el indice armado por el listado, o
+    // se encuentra directamente por mail), siempre se le busca el historial.
+    let accounts = null;
     try {
-      const lookup = await fetch(env.BASE + '/platform/user/m2m/admin/users/by-email?email=' + encodeURIComponent(email), { headers: { 'X-API-Key': env.STUDENT_KEY } });
-      if (lookup.ok) {
-        const txt = await lookup.text();
-        try { backofficeUser = JSON.parse(txt); } catch (e) { /* noop */ }
-      }
-    } catch (e) { /* noop, tratamos como no encontrado */ }
+      accounts = await getAccountsForPerson(email);
+    } catch (e) { /* cache no disponible, seguimos con el fallback de abajo */ }
 
-    const isRealInstructor = !!(backofficeUser && backofficeUser.id && backofficeUser.role === 'INSTRUCTOR');
+    if (!accounts || !accounts.length) {
+      // Cache todavia no poblada (ej. primera vez que se abre un perfil
+      // despues de desplegar esto, antes de haber abierto el listado una
+      // vez) - probamos el mail directamente, como una sola cuenta.
+      let backofficeUser = null;
+      try {
+        const lookup = await fetch(env.BASE + '/platform/user/m2m/admin/users/by-email?email=' + encodeURIComponent(email), { headers: { 'X-API-Key': env.STUDENT_KEY } });
+        if (lookup.ok) {
+          const txt = await lookup.text();
+          try { backofficeUser = JSON.parse(txt); } catch (e) { /* noop */ }
+        }
+      } catch (e) { /* noop, tratamos como no encontrado */ }
+      if (backofficeUser && backofficeUser.id) {
+        accounts = [{ id: backofficeUser.id, email, firstName: backofficeUser.firstName || '', lastName: backofficeUser.lastName || '' }];
+      } else {
+        accounts = [];
+      }
+    }
+
+    const isRealInstructor = accounts.length > 0;
 
     let nombre = '';
     let apellido = '';
     let historial = [];
 
     if (isRealInstructor) {
-      let fn = backofficeUser.firstName;
-      let ln = backofficeUser.lastName;
+      const withName = accounts.find(a => a.firstName || a.lastName);
+      let fn = withName ? withName.firstName : '';
+      let ln = withName ? withName.lastName : '';
       if (!fn && !ln) {
-        const full = await apiGet(env.BASE, `/platform/user/m2m/admin/users/${backofficeUser.id}`, env.STUDENT_KEY);
+        const full = await apiGet(env.BASE, `/platform/user/m2m/admin/users/${accounts[0].id}`, env.STUDENT_KEY);
         fn = full.firstName;
         ln = full.lastName;
       }
@@ -100,19 +145,12 @@ module.exports = async function handler(req, res) {
       apellido = ln || '';
       if (!nombre && !apellido) nombre = email.split('@')[0];
 
-      // TODAS las asignaciones de esta persona, en cualquier estado de fecha
-      // (pasadas, en curso y futuras) - por eso no se manda ningun filtro de
-      // fecha, a diferencia del tablero de Comisiones.
-      const first = await apiGet(env.BASE, `/platform/staff/m2m/admin/assignments?userId=${backofficeUser.id}&page=1&limit=100`, env.STUDENT_KEY);
-      let assignments = (first.items || []).slice();
-      const totalPages = Math.min(first.totalPages || 1, 20);
-      if (totalPages > 1) {
-        const proms = [];
-        for (let p = 2; p <= totalPages; p++) {
-          proms.push(apiGet(env.BASE, `/platform/staff/m2m/admin/assignments?userId=${backofficeUser.id}&page=${p}&limit=100`, env.STUDENT_KEY));
-        }
-        (await Promise.all(proms)).forEach(d => { assignments = assignments.concat(d.items || []); });
-      }
+      // TODAS las asignaciones de TODAS las cuentas de esta persona, en
+      // cualquier estado de fecha (pasadas, en curso y futuras) - por eso no
+      // se manda ningun filtro de fecha, a diferencia del tablero de
+      // Comisiones.
+      const assignmentsByAccount = await Promise.all(accounts.map(a => fetchAssignmentsForAccount(env, a.id)));
+      let assignments = assignmentsByAccount.flat();
 
       // Si se la bajo de una comision (CANCELLED), no debe aparecer mas: eso
       // es justamente lo que Andrea pidio que se reflejara al instante.
@@ -188,6 +226,7 @@ module.exports = async function handler(req, res) {
       nombre,
       apellido,
       esDash: !isRealInstructor,
+      cuentas: accounts.length,
       estado: overlay.estado || 'aprobado',
       comentarios: overlay.comentarios || [],
       cursosHabilitados: overlay.cursosHabilitados || [],
