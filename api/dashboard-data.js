@@ -88,7 +88,15 @@ function timeHM(dateObj) {
 async function fetchAllCohorts(env) {
   const from = todayISO();
   const to = addMonthsISO(MONTHS_AHEAD);
-  const qs = `status=NOT_STARTED&startDateFrom=${from}&startDateTo=${to}&limit=100`;
+  // OJO: no filtramos por status en la consulta. Coderhouse marca una comision
+  // como IN_PROGRESS (deja de estar "NOT_STARTED") apenas se cierra la
+  // inscripcion, que suele ser varios dias ANTES de que arranque la primera
+  // clase. Si filtraramos por status=NOT_STARTED, las comisiones de la
+  // semana mas proxima (que son justo las que hay que revisar con mas
+  // urgencia si les falta staff) desaparecerian del tablero antes de tiempo.
+  // Por eso traemos todo lo que arranca entre hoy y el horizonte, y despues
+  // sacamos solo las CANCELLED / COMPLETED (esas si no corresponde mostrarlas).
+  const qs = `startDateFrom=${from}&startDateTo=${to}&limit=100`;
   const first = await apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts?${qs}&page=1`, env.STUDENT_KEY);
   let all = (first.data || []).slice();
   const totalPages = Math.min((first.pagination && first.pagination.totalPages) || 1, 20);
@@ -100,7 +108,7 @@ async function fetchAllCohorts(env) {
     const results = await Promise.all(pagePromises);
     results.forEach(d => { all = all.concat(d.data || []); });
   }
-  return all;
+  return all.filter(c => c.status !== 'CANCELLED' && c.status !== 'COMPLETED');
 }
 
 async function fetchAllAssignments(env) {
