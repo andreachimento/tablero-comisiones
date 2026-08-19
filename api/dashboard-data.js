@@ -14,10 +14,11 @@
 // haciendo fetch('/api/dashboard-data') y recibe el JSON con las comisiones.
 // ============================================================================
 
-// Rango de comisiones NOT_STARTED a traer (ambas fechas fijas). Cuando quieras
-// otro rango, pedile a Claude que las cambie.
-const START_DATE_FROM = '2026-08-18';
-const START_DATE_TO = '2027-03-01';
+// Rango de comisiones NOT_STARTED a traer: siempre "desde hoy" (se recalcula
+// solo, cada vez que se consulta) hasta esta cantidad de meses hacia adelante.
+// Si en el futuro queres cambiar el horizonte, pedile a Claude que cambie
+// este numero.
+const MONTHS_AHEAD = 4;
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
 const TZ = 'America/Argentina/Buenos_Aires';
 
@@ -45,6 +46,26 @@ function todayISO() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: TZ }); // yyyy-MM-dd
 }
 
+// Devuelve la fecha de "hoy" (en horario Argentina) mas `months` meses,
+// como texto yyyy-MM-dd. Si el mes resultante tiene menos dias que el dia de
+// hoy (ej: hoy es 31 y el mes destino tiene 30), lo ajusta al ultimo dia de
+// ese mes.
+function addMonthsISO(months) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const p = {};
+  parts.forEach(x => { p[x.type] = x.value; });
+  let year = parseInt(p.year, 10);
+  let month = parseInt(p.month, 10) - 1 + months; // 0-indexado
+  const day = parseInt(p.day, 10);
+  year += Math.floor(month / 12);
+  month = ((month % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(year, month + 1, 0).getDate();
+  const safeDay = Math.min(day, lastDayOfTargetMonth);
+  const mm = String(month + 1).padStart(2, '0');
+  const dd = String(safeDay).padStart(2, '0');
+  return `${year}-${mm}-${dd}`;
+}
+
 function fmtDate(dateObj, opts) {
   return new Intl.DateTimeFormat('es-AR', { timeZone: TZ, ...opts }).format(dateObj);
 }
@@ -65,8 +86,8 @@ function timeHM(dateObj) {
 }
 
 async function fetchAllCohorts(env) {
-  const from = START_DATE_FROM;
-  const to = START_DATE_TO;
+  const from = todayISO();
+  const to = addMonthsISO(MONTHS_AHEAD);
   const qs = `status=NOT_STARTED&startDateFrom=${from}&startDateTo=${to}&limit=100`;
   const first = await apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts?${qs}&page=1`, env.STUDENT_KEY);
   let all = (first.data || []).slice();
