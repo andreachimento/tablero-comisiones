@@ -177,19 +177,32 @@ module.exports = async function handler(req, res) {
       const productTitle = Object.fromEntries(productEntries);
 
       const ratings = overlay.ratings || {};
+      const now = new Date();
       historial = assignments.map(a => {
         const c = cohortById[a.cohortId];
         if (!c || c.status === 'CANCELLED') return null; // la comision en si se cancelo
 
-        let estadoComision = 'asignada';
-        if (c.status === 'IN_PROGRESS') estadoComision = 'en_curso';
-        else if (c.status === 'COMPLETED') estadoComision = 'finalizada';
+        const startAR = c.startDate ? new Date(c.startDate) : null;
+        const endAR = c.endDate ? new Date(c.endDate) : null;
+
+        // El "status" que guarda el back office para la comision (IN_PROGRESS
+        // / COMPLETED) no siempre se actualiza cuando corresponde - se
+        // encontraron comisiones marcadas "en curso" cuya fecha de fin ya
+        // paso hace meses. Por eso, si hay fechas cargadas, el estado se
+        // calcula directamente comparando esas fechas con hoy (dato mucho
+        // mas confiable), y solo se usa el status del back office como
+        // ultimo recurso si a la comision le faltan las fechas.
+        let estadoComision;
+        if (endAR) estadoComision = endAR < now ? 'finalizada' : (startAR && startAR > now ? 'asignada' : 'en_curso');
+        else if (startAR) estadoComision = startAR > now ? 'asignada' : 'en_curso';
+        else {
+          estadoComision = 'asignada';
+          if (c.status === 'IN_PROGRESS') estadoComision = 'en_curso';
+          else if (c.status === 'COMPLETED') estadoComision = 'finalizada';
+        }
 
         let tipoAsignacion = 'Titular';
         if (a.isReplacement) tipoAsignacion = a.replacementType === 'REEMPLAZO' ? 'Reemplazo' : 'Suplente';
-
-        const startAR = c.startDate ? new Date(c.startDate) : null;
-        const endAR = c.endDate ? new Date(c.endDate) : null;
 
         return {
           cohortId: c.id,
