@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tablero de Comisiones - Coderhouse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --accent: #FF5A1F;
+    --accent-dark: #D8430E;
+    --accent-light: #FFF0E8;
+    --ink: #17181C;
+    --ink-soft: #5b5f6d;
+    --line: #e6e7ec;
+    --line-soft: #f0f1f4;
+    --bg: #f7f7f8;
+    --green: #0e9f6e;
+    --green-bg: #e5f8f0;
+    --amber: #C48A00;
+    --amber-bg: #FFF3D6;
+    --red: #d92d20;
+    --red-bg: #fde8e6;
+    --pink: #db2777;
+    --pink-bg: #fce7f3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--ink); font-size: 13px; -webkit-font-smoothing: antialiased; }
+
+  .header { background: #ffffff; color: var(--ink); padding: 18px 26px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .header .titlewrap { display: flex; align-items: center; gap: 12px; }
+  .header .logo-wordmark { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); text-transform: uppercase; }
+  .header .logo-wordmark span { color: var(--accent); }
+  .header h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-soft); }
+  .header p { font-size: 11.5px; opacity: 0.7; margin-top: 3px; font-weight: 500; color: var(--ink-soft); }
+  .refresh-btn { background: var(--accent); border: none; color: white; border-radius: 999px; padding: 9px 18px; font-size: 12.5px; cursor: pointer; font-weight: 700; transition: all .15s; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .refresh-btn:hover { background: var(--accent-dark); transform: translateY(-1px); box-shadow: 0 3px 8px rgba(255,90,31,0.35); }
+  .refresh-btn:disabled { opacity: .6; cursor: default; transform: none; }
+  .last-update { font-size: 10.5px; opacity: 0.65; text-align: right; margin-top: 5px; font-weight: 500; color: var(--ink-soft); }
+
+  .stats { display: flex; gap: 10px; padding: 16px 26px; background: transparent; flex-wrap: wrap; }
+  .stat-card { background: white; border-radius: 12px; padding: 12px 18px; min-width: 128px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(20,20,43,0.04); }
+  .stat-card .num { font-size: 22px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
+  .stat-card .lbl { font-size: 10.5px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; font-weight: 600; }
+  .stat-card.green .num { color: var(--green); }
+  .stat-card.orange .num { color: var(--amber); }
+  .stat-card.red .num { color: var(--red); }
+  .stat-card.accent .num { color: var(--accent); }
+
+  .controls { margin: 0 26px 14px; padding: 12px 16px; background: white; border-radius: 12px; border: 1px solid var(--line); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; box-shadow: 0 1px 2px rgba(20,20,43,0.04); }
+  .controls input[type=text] { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; width: 240px; outline: none; transition: all .15s; }
+  .controls input[type=date] { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; outline: none; color: var(--ink); }
+  .controls input:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 3px var(--accent-light); }
+  .filter-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 700; white-space: nowrap; }
+  .quickbtn { border: 1px solid var(--line); background: white; border-radius: 8px; padding: 7px 13px; font-size: 11.5px; cursor: pointer; color: var(--ink-soft); font-weight: 600; transition: all .12s; }
+  .quickbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .quickbtn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .result-count { font-size: 11.5px; color: var(--ink-soft); margin-left: auto; white-space: nowrap; font-weight: 600; }
+  .clear-btn { border: 1px solid var(--line); background: white; border-radius: 8px; padding: 7px 13px; font-size: 11.5px; cursor: pointer; color: var(--red); font-weight: 600; }
+  .clear-btn:hover { background: var(--red-bg); border-color: var(--red); }
+
+  .table-wrap { margin: 0 26px 26px; overflow: auto; max-height: calc(100vh - 268px); border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(20,20,43,0.05); }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; }
+  thead th { background: #fafafc; color: var(--ink); padding: 0; font-size: 11px; font-weight: 700; text-align: left; white-space: nowrap; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--line); box-shadow: 0 1px 0 var(--line); }
+  .th-inner { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; gap: 6px; }
+  .th-label { cursor: pointer; user-select: none; flex: 1; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .4px; font-size: 10.5px; }
+  .th-label:hover { color: var(--accent); }
+  .filter-icon { cursor: pointer; font-size: 9px; padding: 3px 5px; border-radius: 4px; color: #b7b9c4; }
+  .filter-icon:hover { background: var(--line-soft); color: var(--ink-soft); }
+  .filter-icon.active { color: white; background: var(--accent); }
+  th.sorted-asc .th-label, th.sorted-desc .th-label { color: var(--accent); }
+  th.sorted-asc .th-label::after { content: ' \25B2'; font-size: 8px; }
+  th.sorted-desc .th-label::after { content: ' \25BC'; font-size: 8px; }
+
+  tbody tr { border-bottom: 1px solid var(--line-soft); transition: background .1s; }
+  tbody tr:hover { background: var(--accent-light) !important; }
+  td { padding: 9px 12px; vertical-align: middle; white-space: nowrap; font-size: 12.5px; color: var(--ink); }
+  .commission { font-weight: 700; color: var(--accent-dark); font-variant-numeric: tabular-nums; cursor: pointer; border-radius: 6px; }
+  .commission:hover { background: var(--accent-light); text-decoration: underline; }
+  .course-name { font-weight: 600; color: var(--ink); white-space: normal; min-width: 180px; max-width: 260px; }
+  .badge { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .2px; }
+  .tag-si { background: var(--amber-bg); color: var(--amber); }
+  .tag-no { color: #b7b9c4; font-size: 11.5px; font-weight: 500; }
+  .tag-soldout-si { background: var(--pink-bg); color: var(--pink); }
+  .tag-soldout-no { color: #b7b9c4; font-size: 11.5px; font-weight: 500; }
+  .prof-empty { color: var(--red); font-size: 11.5px; font-style: italic; opacity: .85; }
+  .estudiantes { text-align: center; font-weight: 700; border-radius: 999px; padding: 4px 11px; font-variant-numeric: tabular-nums; display: inline-block; min-width: 34px; }
+  .modalidad-tag { background: var(--green-bg); color: var(--green); border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; }
+  .pais-tag { color: var(--ink-soft); font-weight: 600; font-size: 11.5px; }
+
+  .filter-dropdown { position: fixed; background: white; border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(20,20,43,0.18); border-radius: 10px; z-index: 100; min-width: 230px; max-height: 320px; display: flex; flex-direction: column; overflow: hidden; }
+  .filter-dropdown .fd-search { padding: 10px; border-bottom: 1px solid var(--line-soft); }
+  .filter-dropdown .fd-search input { width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; outline: none; }
+  .filter-dropdown .fd-search input:focus { border-color: var(--accent); }
+  .filter-dropdown .fd-actions { display: flex; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid var(--line-soft); font-size: 11px; }
+  .filter-dropdown .fd-actions a { color: var(--accent); cursor: pointer; text-decoration: none; font-weight: 600; }
+  .filter-dropdown .fd-list { overflow-y: auto; padding: 4px 0; }
+  .filter-dropdown .fd-item { display: flex; align-items: center; gap: 7px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+  .filter-dropdown .fd-item:hover { background: var(--line-soft); }
+  .filter-dropdown .fd-footer { padding: 8px 10px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 6px; }
+  .fd-btn { border: 1px solid var(--line); background: white; border-radius: 6px; padding: 5px 12px; font-size: 11px; cursor: pointer; font-weight: 600; }
+  .fd-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .fd-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .fd-btn.primary:hover { background: var(--accent-dark); color: white; }
+
+  .no-results { text-align: center; padding: 50px; color: var(--ink-soft); font-size: 13.5px; background: white; }
+  .loading-row td { text-align: center; padding: 40px; color: var(--ink-soft); }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; bottom: 22px; right: 22px; background: var(--ink); color: white; border-radius: 10px; padding: 12px 18px; font-size: 12.5px; z-index: 999; opacity: 0; transition: opacity 0.3s, transform .3s; transform: translateY(6px); pointer-events: none; max-width: 340px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #d6d8e0; border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: #b7b9c4; }
+
+  /* ======================= Pestañas (Comisiones / Staff) ======================= */
+  .tabs { display: flex; gap: 4px; padding: 0 26px; border-bottom: 3px solid var(--accent); background: white; }
+  .tab { padding: 10px 20px; font-weight: 700; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; border-radius: 8px 8px 0 0; }
+  .tab.active { background: var(--accent); color: white; }
+  .page { padding-top: 18px; }
+  .hidden { display: none !important; }
+
+  h2.section-title { font-size: 16px; font-weight: 800; margin: 0 26px 4px; }
+  p.section-sub { font-size: 12px; color: var(--ink-soft); margin: 0 26px 16px; }
+
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); font-weight: 600; font-size: 12.5px; cursor: pointer; margin: 18px 26px 16px; }
+  .back-link:hover { color: var(--accent); }
+  #staffProfileContent { padding: 0 26px 26px; }
+
+  #pageStaff .table-wrap tbody tr { cursor: pointer; }
+
+  .staff-name { font-weight: 700; color: var(--accent-dark); }
+  .role-tag { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 10.5px; font-weight: 700; margin: 2px 3px 2px 0; }
+  .role-profesor { background: var(--green-bg); color: var(--green); }
+  .role-tutor { background: var(--pink-bg); color: var(--pink); }
+  .estado-tag { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 10.5px; font-weight: 700; }
+  .estado-aprobado { background: var(--green-bg); color: var(--green); }
+  .estado-desaprobado { background: var(--red-bg); color: var(--red); }
+  .estado-futuro { background: var(--amber-bg); color: var(--amber); }
+  .dash-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--line-soft); color: var(--ink-soft); border-radius: 999px; padding: 3px 10px; font-size: 10px; font-weight: 700; }
+  .dash-badge::before { content: '\21BB'; font-size: 10px; }
+
+  /* --- Perfil de staff --- */
+  .profile-header { background: white; border-radius: 12px; border: 1px solid var(--line); padding: 20px 24px; display: flex; align-items: center; gap: 16px; margin: 0 26px 18px; flex-wrap: wrap; }
+  .avatar { width: 54px; height: 54px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; flex-shrink: 0; }
+  .profile-header h1 { font-size: 18px; font-weight: 800; }
+  .profile-header .mail { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+  .profile-header .overall-rating { margin-left: auto; text-align: right; }
+  .overall-rating .stars-big { font-size: 17px; color: var(--line); letter-spacing: 1px; }
+  .overall-rating .stars-big .filled { color: var(--amber); }
+  .overall-rating .rating-num { font-size: 11px; color: var(--ink-soft); font-weight: 600; margin-top: 2px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .card { background: white; border-radius: 12px; border: 1px solid var(--line); padding: 18px 20px; margin-bottom: 18px; }
+  .card h3 { font-size: 13px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+  #staffProfileContent > .card:not(.grid-2 .card) { margin: 0 0 18px; }
+  #staffProfileContent > .card { margin-left: 0; margin-right: 0; }
+
+  .estado-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .estado-btn { border: 1px solid var(--line); background: white; border-radius: 8px; padding: 8px 14px; font-size: 12px; cursor: pointer; font-weight: 700; color: var(--ink-soft); }
+  .estado-btn.active-aprobado { background: var(--green); border-color: var(--green); color: white; }
+  .estado-btn.active-desaprobado { background: var(--red); border-color: var(--red); color: white; }
+  .estado-btn.active-futuro { background: var(--amber); border-color: var(--amber); color: white; }
+
+  .comment-box textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 56px; outline: none; }
+  .comment-box textarea:focus { border-color: var(--accent); background: white; }
+  .btn-add { margin-top: 8px; background: var(--accent); color: white; border: none; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .btn-add:hover { background: var(--accent-dark); }
+  .comment-item { padding: 10px 0; border-top: 1px solid var(--line-soft); }
+  .comment-item:first-child { border-top: none; }
+  .comment-meta { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 3px; }
+  .comment-text { font-size: 12.5px; white-space: pre-wrap; }
+  .comment-edited { font-style: italic; font-weight: 400; }
+  .comment-actions { margin-top: 5px; display: flex; gap: 12px; }
+  .comment-action { font-size: 11px; color: var(--accent); cursor: pointer; font-weight: 600; }
+  .comment-action:hover { text-decoration: underline; }
+  .comment-edit-textarea { width: 100%; border: 1px solid var(--accent); background: white; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 50px; outline: none; }
+
+  .add-course-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .add-course-row input[type=text], .add-course-row select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 7px 10px; font-size: 12px; font-family: inherit; }
+  .habilitado-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+  .habilitado-item:first-child { border-top: none; }
+  .habilitado-item .curso-nombre { font-weight: 600; }
+  .curso-rol-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); margin: 14px 0 2px; }
+  .curso-rol-label:first-child { margin-top: 0; }
+  .cuentas-note { font-size: 11px; color: var(--ink-soft); font-style: italic; }
+  .remove-x { color: var(--red); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+
+  .hist-group-label { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-soft); margin: 14px 0 6px; }
+  .hist-group-label:first-child { margin-top: 0; }
+  .hist-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; background: var(--bg); }
+  .hist-item-asignada { background: var(--amber-bg); }
+  .hist-item-curso { background: var(--green-bg); }
+  .hist-item-final { background: var(--line-soft); }
+  .hist-item .com-left { display: flex; flex-direction: column; }
+  .hist-item .com-curso { font-weight: 700; font-size: 12.5px; }
+  .hist-item .com-num { font-weight: 500; color: var(--ink-soft); font-size: 11px; }
+  .hist-item .com-fechas { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .hist-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .hist-status { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .status-asignada { background: var(--amber-bg); color: var(--amber); }
+  .status-curso { background: var(--green-bg); color: var(--green); }
+  .status-final { background: var(--line-soft); color: var(--ink-soft); }
+  .stars-small { font-size: 13px; color: var(--line); letter-spacing: 1px; cursor: pointer; }
+  .stars-small .filled { color: var(--amber); }
+  .no-rating { font-size: 10.5px; color: var(--ink-soft); font-style: italic; }
+  .tipo-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .tipo-titular { background: var(--line-soft); color: var(--ink-soft); }
+  .tipo-suplente { background: var(--amber-bg); color: var(--amber); }
+  .tipo-reemplazo { background: var(--pink-bg); color: var(--pink); }
+  .live-note { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--ink-soft); font-weight: 600; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="titlewrap">
+    <div>
+      <div class="logo-wordmark">CODER<span>HOUSE</span></div>
+      <h1>Tablero de Comisiones</h1>
+      <p>Comisiones por iniciar</p>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+    <button class="refresh-btn" id="refreshBtn" onclick="triggerRefresh()">&#8635; Actualizar datos</button>
+    <div class="last-update" id="lastUpdate">Cargando...</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" id="tab-comisiones" onclick="showTab('comisiones')">Comisiones</div>
+  <div class="tab" id="tab-staff" onclick="showTab('staff')">Staff</div>
+</div>
+
+<div class="page" id="pageComisiones">
+
+<div class="stats" id="stats"></div>
+
+<div class="controls">
+  <input type="text" id="search" placeholder="Buscar por curso, comision, profesor..." oninput="applyFilters()">
+  <span class="filter-label">Fecha Inicio</span>
+  <input type="date" id="dateFrom" onchange="applyFilters()">
+  <span style="color:#c9cad3;font-size:11px;">&rarr;</span>
+  <input type="date" id="dateTo" onchange="applyFilters()">
+  <button class="quickbtn active" id="qb-todos" onclick="setQuick('ALL')">Todos</button>
+  <button class="quickbtn" id="qb-2profes" onclick="setQuick('2PROF')">Con 2 profesores</button>
+  <button class="quickbtn" id="qb-1profe" onclick="setQuick('1PROF')">Con 1 profesor</button>
+  <button class="quickbtn" id="qb-sinprofe" onclick="setQuick('NOPROF')">Sin profesor</button>
+  <button class="clear-btn" onclick="clearFilters()">&#10005; Limpiar filtros</button>
+  <span class="result-count" id="result-count"></span>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr id="headerRow"></tr></thead>
+    <tbody id="tbody"><tr class="loading-row"><td colspan="14"><span class="spinner"></span>Cargando comisiones desde el sistema de Coderhouse...</td></tr></tbody>
+  </table>
+  <div id="no-results" class="no-results" style="display:none">No hay comisiones con esos filtros.</div>
+</div>
+
+</div><!-- /pageComisiones -->
+
+<!-- ======================= STAFF: listado ======================= -->
+<div class="page hidden" id="pageStaff">
+  <h2 class="section-title">Staff</h2>
+  <p class="section-sub">Profesores y tutores adjuntos del back office.</p>
+
+  <div class="controls">
+    <input type="text" id="fNombre" placeholder="Buscar por nombre..." oninput="applyStaffFilters()">
+    <input type="text" id="fMail" placeholder="Buscar por mail..." oninput="applyStaffFilters()">
+    <select id="fRol" onchange="applyStaffFilters()">
+      <option value="">Todos los roles</option>
+      <option value="profesor">Profesor</option>
+      <option value="tutor">Tutor Adjunto</option>
+    </select>
+    <select id="fCurso" onchange="applyStaffFilters()">
+      <option value="">Todos los cursos</option>
+    </select>
+    <select id="fEstado" onchange="applyStaffFilters()">
+      <option value="">Todos los estados</option>
+      <option value="aprobado">Aprobado</option>
+      <option value="desaprobado">Desaprobado</option>
+      <option value="futuro">Consideracion futura</option>
+    </select>
+    <button class="btn-add" style="margin-top:0;" onclick="copyStaffEmails()">&#128203; Copiar mails</button>
+    <span class="result-count" id="staffCount"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Nombre</th><th>Mail</th><th>Roles habilitados</th><th>Estado</th><th>Rating</th></tr></thead>
+      <tbody id="staffTbody"><tr><td colspan="5" style="text-align:center;padding:30px;color:var(--ink-soft);"><span class="spinner"></span>Cargando staff...</td></tr></tbody>
+    </table>
+  </div>
+</div><!-- /pageStaff -->
+
+<!-- ======================= STAFF: perfil ======================= -->
+<div class="page hidden" id="pageStaffProfile">
+  <div class="back-link" onclick="closeStaffProfile()">&larr; Volver al listado de Staff</div>
+  <div id="staffProfileContent"></div>
+</div><!-- /pageStaffProfile -->
+
+<datalist id="cursoDatalist"></datalist>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let DATA = [];
+let hasLoadedOnce = false;
+
+const COLUMNS = [
+  {key:'commission', label:'N. Comision', filter:false},
+  {key:'course', label:'Curso', filter:true},
+  {key:'isB2B', label:'B2B', filter:true, fmt:v=>v?'SI':'NO'},
+  {key:'profesor1', label:'Profesor', filter:true},
+  {key:'profesor2', label:'Profesor 2', filter:true},
+  {key:'startDateISO', label:'Fecha Inicio', filter:false},
+  {key:'endDate', label:'Fecha Fin', filter:false},
+  {key:'days', label:'Dias de Semana', filter:true},
+  {key:'horaInicio', label:'Hora Inicio', filter:true},
+  {key:'horaFin', label:'Hora Fin', filter:true},
+  {key:'isSoldOut', label:'Sold Out', filter:true, fmt:v=>v?'SI':'NO'},
+  {key:'students', label:'Estudiantes', filter:false},
+  {key:'modalidad', label:'Modalidad', filter:true},
+  {key:'pais', label:'Pais', filter:true},
+];
+
+let filters = {};
+let quick = 'ALL';
+let sortCol = 'startDateISO', sortDir = 1;
+let openDropdownKey = null;
+let lastRenderedRows = [];
+
+const DAYS_FULL = { Lun: 'Lunes', Mar: 'Martes', Mie: 'Miércoles', Jue: 'Jueves', Vie: 'Viernes', Sab: 'Sábado', Dom: 'Domingo' };
+
+// Junta una lista de textos al estilo español: "A", "A y B", "A, B y C".
+function joinSpanish(arr){
+  if(arr.length === 0) return '';
+  if(arr.length === 1) return arr[0];
+  if(arr.length === 2) return arr[0] + ' y ' + arr[1];
+  return arr.slice(0, -1).join(', ') + ' y ' + arr[arr.length - 1];
+}
+
+// Quita ceros a la izquierda de una fecha dd/mm/yyyy (ej: "12/08/2026" -> "12/8/2026").
+function shortDate(s){
+  if(!s) return '';
+  return s.split('/').map(p => String(parseInt(p, 10))).join('/');
+}
+
+function buildComisionText(r){
+  const diasFull = (r.days ? r.days.split('/') : []).map(d => DAYS_FULL[d] || d);
+  return 'Curso: ' + r.course + '\n'
+    + 'Comisión: ' + r.commission + '\n'
+    + 'Días: ' + joinSpanish(diasFull) + '\n'
+    + 'Horario: ' + r.horaInicio + ' - ' + r.horaFin + '\n'
+    + 'Inicio: ' + shortDate(r.startDate) + '\n'
+    + 'Fin: ' + shortDate(r.endDate);
+}
+
+function fallbackCopy(text){
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch(e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+function copyComisionInfo(r){
+  const text = buildComisionText(r);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('Copiado: comisión #' + r.commission, 2200))
+      .catch(() => {
+        const ok = fallbackCopy(text);
+        showToast(ok ? 'Copiado: comisión #' + r.commission : 'No se pudo copiar automáticamente', 2500);
+      });
+  } else {
+    const ok = fallbackCopy(text);
+    showToast(ok ? 'Copiado: comisión #' + r.commission : 'No se pudo copiar automáticamente', 2500);
+  }
+}
+
+document.getElementById('tbody').addEventListener('click', function(e){
+  const td = e.target.closest('td.commission');
+  if(!td) return;
+  const idx = parseInt(td.getAttribute('data-idx'), 10);
+  const r = lastRenderedRows[idx];
+  if(r) copyComisionInfo(r);
+});
+
+function showToast(msg, ms){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), ms || 3500);
+}
+
+function loadData(auto){
+  const b = document.getElementById('refreshBtn');
+  if(!auto){ b.textContent = 'Actualizando...'; b.disabled = true; }
+  if(hasLoadedOnce && !auto) showToast('Consultando el sistema de Coderhouse (puede tardar unos segundos)...', 15000);
+  fetch('/api/dashboard-data')
+    .then(r => r.json())
+    .then(payload => onDataLoaded(payload, auto))
+    .catch(err => onLoadError({message: err && err.message ? err.message : String(err)}, auto));
+}
+
+function onDataLoaded(payload, auto){
+  const b = document.getElementById('refreshBtn');
+  b.textContent = '↻ Actualizar datos'; b.disabled = false;
+  if(!payload || payload.error){
+    onLoadError({message: (payload && payload.error) || 'Respuesta invalida del servidor'}, auto);
+    return;
+  }
+  const prevCount = DATA.length;
+  DATA = payload.rows || [];
+  document.getElementById('lastUpdate').textContent = 'Ultima actualizacion: ' + payload.lastUpdate + ' hs (AR)';
+  hasLoadedOnce = true;
+  buildHeader();
+  updateStats();
+  applyFilters();
+  if(!auto){
+    showToast('Datos actualizados: ' + DATA.length + ' comisiones.', 3500);
+  } else if(DATA.length !== prevCount){
+    showToast('Se detectaron cambios: ahora hay ' + DATA.length + ' comisiones (actualizacion automatica).', 4500);
+  }
+}
+
+function onLoadError(err, auto){
+  const b = document.getElementById('refreshBtn');
+  b.textContent = '↻ Actualizar datos'; b.disabled = false;
+  if(!auto) showToast('No se pudo actualizar: ' + (err && err.message ? err.message : err), 7000);
+  if(!hasLoadedOnce){
+    document.getElementById('tbody').innerHTML = '<tr class="loading-row"><td colspan="14">No se pudieron cargar los datos. Apreta "Actualizar datos" para reintentar.</td></tr>';
+  }
+}
+
+function triggerRefresh(){ loadData(false); }
+
+// Actualizacion automatica: cada 5 minutos vuelve a consultar el sistema de
+// Coderhouse en segundo plano, asi si se crea o se cancela una comision el
+// tablero lo refleja solo, sin que nadie tenga que apretar "Actualizar datos".
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+setInterval(() => loadData(true), AUTO_REFRESH_MS);
+
+// Si la pestaña estuvo en segundo plano (minimizada u otra pestaña activa) y
+// la persona vuelve a mirarla, se actualiza al toque en vez de esperar al
+// proximo ciclo de 5 minutos.
+let lastAutoRefreshAt = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && hasLoadedOnce){
+    const elapsed = Date.now() - lastAutoRefreshAt;
+    if(elapsed > 60 * 1000){
+      lastAutoRefreshAt = Date.now();
+      loadData(true);
+    }
+  }
+});
+
+function distinctValues(key, fmt){
+  const set = new Set();
+  DATA.forEach(r => set.add(fmt ? fmt(r[key]) : (r[key] === '' || r[key]==null ? '(vacio)' : String(r[key]))));
+  return Array.from(set).sort((a,b)=>a.localeCompare(b,'es'));
+}
+
+function closeDropdown(){
+  const el = document.getElementById('fd-dropdown');
+  if(el) el.remove();
+  openDropdownKey = null;
+}
+
+function openDropdown(col, anchorEl){
+  if(openDropdownKey === col.key){ closeDropdown(); return; }
+  closeDropdown();
+  openDropdownKey = col.key;
+  const values = distinctValues(col.key, col.fmt);
+  const current = filters[col.key];
+
+  const dd = document.createElement('div');
+  dd.className = 'filter-dropdown';
+  dd.id = 'fd-dropdown';
+  const rect = anchorEl.getBoundingClientRect();
+  const ddWidth = 240;
+  let left = rect.left - 40;
+  if(left + ddWidth > window.innerWidth - 10) left = window.innerWidth - ddWidth - 10;
+  left = Math.max(4, left);
+  let top = rect.bottom + 4;
+  if(top + 320 > window.innerHeight - 10) top = Math.max(4, rect.top - 324);
+  dd.style.top = top + 'px';
+  dd.style.left = left + 'px';
+
+  dd.innerHTML = `
+    <div class="fd-search"><input type="text" placeholder="Buscar valor..." id="fd-search-input"></div>
+    <div class="fd-actions"><a id="fd-all">Seleccionar todos</a><a id="fd-none">Limpiar</a></div>
+    <div class="fd-list" id="fd-list"></div>
+    <div class="fd-footer">
+      <button class="fd-btn" id="fd-cancel">Cancelar</button>
+      <button class="fd-btn primary" id="fd-apply">Aplicar</button>
+    </div>`;
+  document.body.appendChild(dd);
+
+  let checkedSet = current ? new Set(current) : new Set(values);
+
+  function renderList(filterText){
+    const list = document.getElementById('fd-list');
+    const ft = (filterText||'').toLowerCase();
+    list.innerHTML = values.filter(v => v.toLowerCase().includes(ft)).map(v => {
+      const id = 'fdchk-' + btoa(unescape(encodeURIComponent(v))).replace(/[^a-zA-Z0-9]/g,'');
+      const checked = checkedSet.has(v) ? 'checked' : '';
+      return `<label class="fd-item" for="${id}"><input type="checkbox" id="${id}" data-val="${encodeURIComponent(v)}" ${checked}> ${v}</label>`;
+    }).join('');
+    list.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const val = decodeURIComponent(cb.getAttribute('data-val'));
+        if(cb.checked) checkedSet.add(val); else checkedSet.delete(val);
+      });
+    });
+  }
+  renderList('');
+
+  document.getElementById('fd-search-input').addEventListener('input', e => renderList(e.target.value));
+  document.getElementById('fd-all').onclick = () => { checkedSet = new Set(values); renderList(document.getElementById('fd-search-input').value); };
+  document.getElementById('fd-none').onclick = () => { checkedSet = new Set(); renderList(document.getElementById('fd-search-input').value); };
+  document.getElementById('fd-cancel').onclick = closeDropdown;
+  document.getElementById('fd-apply').onclick = () => {
+    if(checkedSet.size === values.length) delete filters[col.key];
+    else filters[col.key] = checkedSet;
+    closeDropdown();
+    applyFilters();
+  };
+
+  setTimeout(() => {
+    document.addEventListener('click', function handler(e){
+      if(!dd.contains(e.target) && e.target !== anchorEl){
+        closeDropdown();
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 0);
+}
+
+function buildHeader(){
+  const tr = document.getElementById('headerRow');
+  tr.innerHTML = COLUMNS.map(col => {
+    const activeFilter = filters[col.key] ? 'active' : '';
+    const filterIcon = col.filter ? `<span class="filter-icon ${activeFilter}" data-colkey="${col.key}" title="Filtrar">&#9660;</span>` : '';
+    return `<th data-sortkey="${col.key}"><div class="th-inner"><span class="th-label" data-sortkey2="${col.key}">${col.label}</span>${filterIcon}</div></th>`;
+  }).join('');
+
+  tr.querySelectorAll('.th-label').forEach(el => {
+    el.addEventListener('click', () => sortBy(el.getAttribute('data-sortkey2')));
+  });
+  tr.querySelectorAll('.filter-icon').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = el.getAttribute('data-colkey');
+      const col = COLUMNS.find(c => c.key === key);
+      openDropdown(col, el);
+    });
+  });
+  updateSortIndicators();
+}
+
+function updateSortIndicators(){
+  document.querySelectorAll('#headerRow th').forEach(th => {
+    th.classList.remove('sorted-asc','sorted-desc');
+    if(th.getAttribute('data-sortkey') === sortCol){
+      th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+    }
+  });
+}
+
+function sortBy(key){
+  sortDir = (sortCol === key) ? -sortDir : 1;
+  sortCol = key;
+  updateSortIndicators();
+  applyFilters();
+}
+
+function setQuick(val){
+  quick = val;
+  document.getElementById('qb-todos').classList.toggle('active', val==='ALL');
+  document.getElementById('qb-2profes').classList.toggle('active', val==='2PROF');
+  document.getElementById('qb-1profe').classList.toggle('active', val==='1PROF');
+  document.getElementById('qb-sinprofe').classList.toggle('active', val==='NOPROF');
+  applyFilters();
+}
+
+function clearFilters(){
+  filters = {};
+  quick = 'ALL';
+  document.getElementById('search').value = '';
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  setQuick('ALL');
+  buildHeader();
+  applyFilters();
+}
+
+function passesColumnFilters(r){
+  for(const col of COLUMNS){
+    if(!col.filter) continue;
+    const allowed = filters[col.key];
+    if(!allowed) continue;
+    const raw = r[col.key];
+    const v = col.fmt ? col.fmt(raw) : (raw === '' || raw == null ? '(vacio)' : String(raw));
+    if(!allowed.has(v)) return false;
+  }
+  return true;
+}
+
+function applyFilters(){
+  if(!hasLoadedOnce) return;
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  const df = document.getElementById('dateFrom').value;
+  const dt = document.getElementById('dateTo').value;
+
+  let rows = DATA.filter(r => {
+    if(quick === '2PROF' && r.profCount < 2) return false;
+    if(quick === '1PROF' && r.profCount !== 1) return false;
+    if(quick === 'NOPROF' && r.profCount > 0) return false;
+    if(!passesColumnFilters(r)) return false;
+    if(df && r.startDateISO < df) return false;
+    if(dt && r.startDateISO > dt) return false;
+    if(q){
+      const hay = (String(r.commission)+' '+r.course+' '+r.profesor1+' '+r.profesor2).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a,b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if(typeof va === 'boolean') va = va?1:0;
+    if(typeof vb === 'boolean') vb = vb?1:0;
+    if(typeof va === 'number' && typeof vb === 'number') return sortDir*(va-vb);
+    va = String(va||'').toLowerCase(); vb = String(vb||'').toLowerCase();
+    return sortDir*(va<vb?-1:va>vb?1:0);
+  });
+
+  document.getElementById('result-count').textContent = 'Mostrando ' + rows.length + ' de ' + DATA.length;
+
+  const tbody = document.getElementById('tbody');
+  if(!rows.length){
+    tbody.innerHTML = '';
+    document.getElementById('no-results').style.display = 'block';
+    return;
+  }
+  document.getElementById('no-results').style.display = 'none';
+
+  lastRenderedRows = rows;
+
+  tbody.innerHTML = rows.map((r, idx) => {
+    const pct = r.maxStudents > 0 ? r.students / r.maxStudents : 0;
+    const bg = pct >= 0.85 ? 'var(--pink-bg)' : pct >= 0.5 ? 'var(--amber-bg)' : 'var(--green-bg)';
+    const color = pct >= 0.85 ? 'var(--pink)' : pct >= 0.5 ? 'var(--amber)' : 'var(--green)';
+    return '<tr>'
+      + '<td class="commission" data-idx="' + idx + '" title="Clic para copiar los datos de esta comision">#' + r.commission + '</td>'
+      + '<td class="course-name">' + r.course + '</td>'
+      + '<td>' + (r.isB2B ? '<span class="badge tag-si">SI</span>' : '<span class="tag-no">NO</span>') + '</td>'
+      + '<td>' + (r.profesor1 ? r.profesor1 : '<span class="prof-empty">Sin asignar</span>') + '</td>'
+      + '<td>' + (r.profesor2 ? r.profesor2 : '<span class="prof-empty">Sin asignar</span>') + '</td>'
+      + '<td>' + r.startDate + '</td>'
+      + '<td>' + r.endDate + '</td>'
+      + '<td>' + r.days + '</td>'
+      + '<td>' + r.horaInicio + '</td>'
+      + '<td>' + r.horaFin + '</td>'
+      + '<td>' + (r.isSoldOut ? '<span class="badge tag-soldout-si">SI</span>' : '<span class="tag-soldout-no">NO</span>') + '</td>'
+      + '<td><span class="estudiantes" style="background:' + bg + ';color:' + color + '">' + r.students + '</span></td>'
+      + '<td><span class="modalidad-tag">' + r.modalidad + '</span></td>'
+      + '<td class="pais-tag">' + r.pais + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function updateStats(){
+  const t = DATA.length;
+  const con2 = DATA.filter(r => r.profCount >= 2).length;
+  const con1 = DATA.filter(r => r.profCount === 1).length;
+  const sin = DATA.filter(r => r.profCount === 0).length;
+  const soldout = DATA.filter(r => r.isSoldOut).length;
+  const b2b = DATA.filter(r => r.isB2B).length;
+  document.getElementById('stats').innerHTML =
+    '<div class="stat-card"><div class="num">' + t + '</div><div class="lbl">Total por iniciar</div></div>' +
+    '<div class="stat-card green"><div class="num">' + con2 + '</div><div class="lbl">Con 2 profesores</div></div>' +
+    '<div class="stat-card orange"><div class="num">' + con1 + '</div><div class="lbl">Con 1 profesor</div></div>' +
+    '<div class="stat-card red"><div class="num">' + sin + '</div><div class="lbl">Sin profesor</div></div>' +
+    '<div class="stat-card"><div class="num">' + soldout + '</div><div class="lbl">Sold out</div></div>' +
+    '<div class="stat-card"><div class="num">' + b2b + '</div><div class="lbl">B2B</div></div>';
+}
+
+buildHeader();
+loadData();
+
+// ============================================================================
+// PESTAÑA STAFF
+// ============================================================================
+let STAFF = [];
+let staffLoadedOnce = false;
+let currentStaffEmail = null;
+let currentStaffProfile = null;
+let staffVisibleRows = [];
+let allCourseNames = [];
+
+const ROLE_LABELS = { profesor: 'Profesor', tutor: 'Tutor Adjunto' };
+const ESTADO_LABELS = { aprobado: 'Aprobado', desaprobado: 'Desaprobado', futuro: 'Consideracion futura' };
+
+function showTab(tab){
+  document.getElementById('tab-comisiones').classList.toggle('active', tab === 'comisiones');
+  document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
+  document.getElementById('pageComisiones').classList.toggle('hidden', tab !== 'comisiones');
+  const showingProfile = tab === 'staff' && currentStaffEmail;
+  document.getElementById('pageStaff').classList.toggle('hidden', !(tab === 'staff' && !currentStaffEmail));
+  document.getElementById('pageStaffProfile').classList.toggle('hidden', !showingProfile);
+  if(tab === 'staff'){
+    if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
+    else loadStaffList();
+  }
+}
+
+function loadStaffList(){
+  const tbody = document.getElementById('staffTbody');
+  if(!staffLoadedOnce){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--ink-soft);"><span class="spinner"></span>Cargando staff...</td></tr>';
+  }
+  fetch('/api/staff-list')
+    .then(r => r.json())
+    .then(payload => {
+      if(!payload || payload.error){
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--red);">No se pudo cargar: ' + ((payload && payload.error) || 'error desconocido') + '</td></tr>';
+        return;
+      }
+      STAFF = payload.staff || [];
+      staffLoadedOnce = true;
+      if(payload.overlayError && !staffLoadedOnce){
+        showToast('Ojo: todavia no esta conectada la base de datos (' + payload.overlayError + ')', 6000);
+      }
+      buildStaffCourseFilter();
+      applyStaffFilters();
+    })
+    .catch(err => {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--red);">No se pudo cargar el staff: ' + err.message + '</td></tr>';
+    });
+}
+
+function buildStaffCourseFilter(){
+  const sel = document.getElementById('fCurso');
+  const current = sel.value;
+  const cursos = new Set();
+  STAFF.forEach(p => (p.cursosHabilitados || []).forEach(c => cursos.add(c.curso)));
+  allCourseNames = Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
+  sel.innerHTML = '<option value="">Todos los cursos</option>' + allCourseNames.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('');
+  sel.value = current;
+  document.getElementById('cursoDatalist').innerHTML = allCourseNames.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">').join('');
+}
+
+function applyStaffFilters(){
+  const nombre = document.getElementById('fNombre').value.toLowerCase().trim();
+  const mail = document.getElementById('fMail').value.toLowerCase().trim();
+  const rol = document.getElementById('fRol').value;
+  const curso = document.getElementById('fCurso').value;
+  const estado = document.getElementById('fEstado').value;
+
+  let rows = STAFF.filter(p => {
+    if(nombre && !p.nombre.toLowerCase().includes(nombre)) return false;
+    if(mail && !p.email.toLowerCase().includes(mail)) return false;
+    if(rol && !(p.roles || []).includes(rol)) return false;
+    if(curso && !(p.cursosHabilitados || []).some(c => c.curso === curso)) return false;
+    if(estado && p.estado !== estado) return false;
+    return true;
+  });
+  rows.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+  document.getElementById('staffCount').textContent = rows.length + ' persona' + (rows.length === 1 ? '' : 's');
+
+  staffVisibleRows = rows;
+  const tbody = document.getElementById('staffTbody');
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--ink-soft);">No hay resultados con esos filtros.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((p, idx) => {
+    const roleTags = (p.roles || []).map(r => '<span class="role-tag role-' + r + '">' + (ROLE_LABELS[r] || r) + '</span>').join('');
+    const dashBadge = p.source === 'dash' ? ' <span class="dash-badge">Extraido de Dash</span>' : '';
+    const ratingCell = p.ratingPromedio != null ? ('★ ' + p.ratingPromedio) : '<span class="no-rating">Sin comisiones aun</span>';
+    return '<tr data-idx="' + idx + '">'
+      + '<td class="staff-name">' + escapeHtml(p.nombre) + dashBadge + '</td>'
+      + '<td>' + escapeHtml(p.email) + '</td>'
+      + '<td>' + (roleTags || '<span class="no-rating">Sin cursos habilitados</span>') + '</td>'
+      + '<td><span class="estado-tag estado-' + p.estado + '">' + (ESTADO_LABELS[p.estado] || p.estado) + '</span></td>'
+      + '<td>' + ratingCell + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+document.getElementById('staffTbody').addEventListener('click', function(e){
+  const tr = e.target.closest('tr[data-idx]');
+  if(!tr) return;
+  const idx = parseInt(tr.getAttribute('data-idx'), 10);
+  const p = staffVisibleRows[idx];
+  if(p) openStaffProfile(p.email);
+});
+
+function copyStaffEmails(){
+  const rows = staffVisibleRows || [];
+  if(!rows.length){ showToast('No hay mails para copiar con estos filtros.', 3000); return; }
+  const text = rows.map(p => p.email).join(', ');
+  const done = ok => showToast(ok ? ('Copiados ' + rows.length + ' mails. Pegalos en el "Para:" de tu mail.') : 'No se pudo copiar automaticamente.', 3500);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(() => done(true)).catch(() => done(fallbackCopy(text)));
+  } else {
+    done(fallbackCopy(text));
+  }
+}
+
+function openStaffProfile(email){
+  currentStaffEmail = email;
+  document.getElementById('pageStaff').classList.add('hidden');
+  document.getElementById('pageStaffProfile').classList.remove('hidden');
+  window.scrollTo(0, 0);
+  loadStaffProfile(email);
+}
+
+function closeStaffProfile(){
+  currentStaffEmail = null;
+  document.getElementById('pageStaffProfile').classList.add('hidden');
+  document.getElementById('pageStaff').classList.remove('hidden');
+  loadStaffList();
+}
+
+function loadStaffProfile(email){
+  const wrap = document.getElementById('staffProfileContent');
+  wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink-soft);"><span class="spinner"></span>Cargando perfil...</div>';
+  fetch('/api/staff-profile?email=' + encodeURIComponent(email))
+    .then(r => r.json())
+    .then(payload => {
+      if(!payload || payload.error){
+        wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red);">No se pudo cargar el perfil: ' + ((payload && payload.error) || 'error') + '</div>';
+        return;
+      }
+      renderStaffProfile(payload);
+    })
+    .catch(err => {
+      wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red);">No se pudo cargar el perfil: ' + err.message + '</div>';
+    });
+}
+
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function initials(nombre){
+  const parts = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  return ((parts[0] || '')[0] || '').toUpperCase() + ((parts[1] || '')[0] || '').toUpperCase();
+}
+
+function starsHtml(rating){
+  let h = '';
+  for(let i = 1; i <= 5; i++) h += '<span class="' + (i <= Math.round(rating) ? 'filled' : '') + '">★</span>';
+  return h;
+}
+
+function formatFechaCorta(iso){
+  if(!iso) return '';
+  try {
+    return new Intl.DateTimeFormat('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'numeric', year: 'numeric' }).format(new Date(iso));
+  } catch(e) { return ''; }
+}
+
+function renderStaffProfile(p){
+  currentStaffProfile = p;
+  const wrap = document.getElementById('staffProfileContent');
+  const fullName = (p.nombre + ' ' + p.apellido).trim();
+  const dashBadge = p.esDash ? ' <span class="dash-badge">Extraido de Dash</span>' : '';
+
+  const cuentasNote = (p.cuentas || 0) > 1 ? ' <span class="cuentas-note">(' + p.cuentas + ' cuentas del back office unificadas)</span>' : '';
+
+  let html = '';
+  html += '<div class="profile-header"><div class="avatar">' + initials(fullName) + '</div>'
+    + '<div><h1>' + escapeHtml(fullName) + dashBadge + '</h1><div class="mail">' + escapeHtml(p.email) + cuentasNote + '</div></div>';
+  if(p.ratingPromedio != null){
+    html += '<div class="overall-rating"><div class="stars-big">' + starsHtml(p.ratingPromedio) + '</div>'
+      + '<div class="rating-num">' + p.ratingPromedio + ' / 5 &middot; promedio de ' + p.ratingCount + ' comision' + (p.ratingCount === 1 ? '' : 'es') + ' calificada' + (p.ratingCount === 1 ? '' : 's') + '</div></div>';
+  }
+  html += '</div>';
+
+  if(p.esDash){
+    html += '<div class="card" style="background:var(--line-soft);border:none;margin:0 26px 18px;"><p style="font-size:12px;color:var(--ink-soft);">Este perfil viene de tu base de habilitados. Todavia no tiene cuenta activa ni comisiones en el Back Office de Coderhouse, asi que no va a mostrar historial hasta que se le asigne una comision por primera vez. Si el nombre no es correcto (se dedujo del mail), avisame y lo corrijo.</p></div>';
+  }
+
+  html += '<div class="card" style="margin:0 26px 18px;"><h3>Estado del perfil</h3><div class="estado-row">'
+    + ['aprobado', 'desaprobado', 'futuro'].map(v => '<button class="estado-btn ' + (p.estado === v ? 'active-' + v : '') + '" onclick="setStaffEstado(\'' + v + '\')">' + ESTADO_LABELS[v] + '</button>').join('')
+    + '</div></div>';
+
+  html += '<div class="grid-2" style="margin:0 26px;"><div>';
+
+  html += '<div class="card"><h3>Comentarios</h3><div class="comment-box"><textarea id="newComentario" placeholder="Escribir un comentario sobre esta persona..."></textarea>'
+    + '<button class="btn-add" onclick="addStaffComentario()">+ Agregar comentario</button></div><div style="margin-top:14px;">';
+  html += (p.comentarios || []).map((c, i) => '<div class="comment-item" data-idx="' + i + '"><div class="comment-meta">' + escapeHtml(c.autor || '') + ' &middot; ' + formatFechaCorta(c.fecha) + (c.editado ? ' <span class="comment-edited">(editado)</span>' : '') + '</div>'
+    + '<div class="comment-text" id="commentText' + i + '">' + escapeHtml(c.texto) + '</div>'
+    + '<div class="comment-actions"><span class="comment-action" onclick="editStaffComentario(' + i + ')">Editar</span><span class="comment-action" onclick="deleteStaffComentario(' + i + ')">Eliminar</span></div>'
+    + '</div>').join('')
+    || '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no hay comentarios.</p>';
+  html += '</div></div>';
+
+  html += '<div class="card"><h3>Cursos habilitados a dictar</h3>'
+    + '<div class="add-course-row">'
+    + '<input type="text" id="newCursoNombre" list="cursoDatalist" placeholder="Nombre del curso..." style="flex:1;min-width:160px;">'
+    + '<select id="newCursoRol"><option value="profesor">Profesor</option><option value="tutor">Tutor Adjunto</option></select>'
+    + '<button class="btn-add" style="margin-top:0;" onclick="addStaffCurso()">+ Agregar</button>'
+    + '</div><div>';
+  const cursos = p.cursosHabilitados || [];
+  if (!cursos.length) {
+    html += '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no tiene cursos habilitados.</p>';
+  } else {
+    ['profesor', 'tutor'].forEach(rol => {
+      const items = cursos.filter(c => c.rol === rol);
+      if (!items.length) return;
+      html += '<div class="curso-rol-label">Como ' + (ROLE_LABELS[rol] || rol) + '</div>';
+      html += items.map(c => '<div class="habilitado-item"><span class="curso-nombre">' + escapeHtml(c.curso) + '</span>'
+        + '<span><span class="role-tag role-' + c.rol + '">' + (ROLE_LABELS[c.rol] || c.rol) + '</span>'
+        + '<span class="remove-x" onclick="removeStaffCurso(\'' + encodeURIComponent(c.curso) + '\',\'' + c.rol + '\')">&#10005;</span></span></div>').join('');
+    });
+  }
+  html += '</div></div>';
+
+  html += '</div>'; // fin columna izquierda
+
+  html += '<div class="card"><h3>Historial de comisiones <span class="live-note"><span class="live-dot"></span>En vivo</span></h3>';
+  const groups = [
+    { key: 'asignada', label: 'Asignadas &middot; aun no iniciaron', statusClass: 'status-asignada', itemClass: 'hist-item-asignada', statusLabel: 'Asignada' },
+    { key: 'en_curso', label: 'En curso', statusClass: 'status-curso', itemClass: 'hist-item-curso', statusLabel: 'En curso' },
+    { key: 'finalizada', label: 'Finalizadas', statusClass: 'status-final', itemClass: 'hist-item-final', statusLabel: 'Finalizada' },
+  ];
+  const hist = p.historial || [];
+  let anyHist = false;
+  groups.forEach(g => {
+    const items = hist.filter(h => h.estadoComision === g.key);
+    if(!items.length) return;
+    anyHist = true;
+    html += '<div class="hist-group-label">' + g.label + '</div>';
+    items.forEach(h => {
+      const tipoClass = h.tipoAsignacion === 'Suplente' ? 'tipo-suplente' : (h.tipoAsignacion === 'Reemplazo' ? 'tipo-reemplazo' : 'tipo-titular');
+      html += '<div class="hist-item ' + g.itemClass + '"><div class="com-left"><span class="com-curso">' + escapeHtml(h.curso) + ' <span class="com-num">#' + h.comisionNumber + '</span></span>'
+        + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span></div>'
+        + '<div class="hist-right"><span class="hist-status ' + g.statusClass + '">' + g.statusLabel + '</span>';
+      if(g.key === 'finalizada'){
+        html += '<span class="stars-small" data-cohort="' + h.cohortId + '" data-rating="' + (h.rating || 0) + '"></span>';
+      } else {
+        html += '<span class="no-rating">Aun no calificada</span>';
+      }
+      html += '</div></div>';
+    });
+  });
+  if(!anyHist) html += '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Sin comisiones todavia.</p>';
+  html += '</div>';
+
+  html += '</div>'; // fin grid-2
+
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('.stars-small').forEach(el => {
+    const rating = parseInt(el.getAttribute('data-rating'), 10) || 0;
+    const cohortId = el.getAttribute('data-cohort');
+    function render(current){
+      el.innerHTML = '';
+      for(let i = 1; i <= 5; i++){
+        const s = document.createElement('span');
+        s.textContent = '★';
+        if(i <= current) s.classList.add('filled');
+        s.onclick = () => { setStaffRating(cohortId, i); render(i); };
+        el.appendChild(s);
+      }
+    }
+    render(rating);
+  });
+}
+
+function postStaffUpdate(action, payload){
+  return fetch('/api/staff-update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: currentStaffEmail, action, payload }),
+  }).then(r => r.json());
+}
+
+function setStaffEstado(val){
+  postStaffUpdate('setEstado', { estado: val }).then(resp => {
+    if(resp && resp.ok){ showToast('Estado actualizado.', 2000); loadStaffProfile(currentStaffEmail); }
+    else showToast('No se pudo actualizar el estado: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function addStaffComentario(){
+  const ta = document.getElementById('newComentario');
+  const texto = ta.value.trim();
+  if(!texto) return;
+  postStaffUpdate('addComentario', { texto: texto, autor: 'Andrea Chimento' }).then(resp => {
+    if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
+    else showToast('No se pudo agregar el comentario: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function editStaffComentario(i){
+  const c = (currentStaffProfile && currentStaffProfile.comentarios || [])[i];
+  if(!c) return;
+  const div = document.getElementById('commentText' + i);
+  if(!div) return;
+  div.innerHTML = '<textarea class="comment-edit-textarea" id="editComentarioTa' + i + '">' + escapeHtml(c.texto) + '</textarea>'
+    + '<div style="margin-top:6px;display:flex;gap:12px;">'
+    + '<span class="comment-action" onclick="saveStaffComentario(' + i + ')">Guardar</span>'
+    + '<span class="comment-action" onclick="renderStaffProfile(currentStaffProfile)">Cancelar</span>'
+    + '</div>';
+  const ta = document.getElementById('editComentarioTa' + i);
+  if(ta) ta.focus();
+}
+
+function saveStaffComentario(i){
+  const ta = document.getElementById('editComentarioTa' + i);
+  if(!ta) return;
+  const texto = ta.value.trim();
+  if(!texto){ showToast('El comentario no puede quedar vacio.', 2500); return; }
+  postStaffUpdate('editComentario', { index: i, texto: texto }).then(resp => {
+    if(resp && resp.ok){ showToast('Comentario editado.', 2000); loadStaffProfile(currentStaffEmail); }
+    else showToast('No se pudo editar el comentario: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function deleteStaffComentario(i){
+  const item = document.querySelector('.comment-item[data-idx="' + i + '"]');
+  if(!item) return;
+  const actions = item.querySelector('.comment-actions');
+  if(!actions) return;
+  actions.innerHTML = '<span style="font-size:11px;color:var(--ink-soft);">Eliminar este comentario?</span>'
+    + '<span class="comment-action" style="color:var(--red);" onclick="confirmDeleteStaffComentario(' + i + ')">Si, eliminar</span>'
+    + '<span class="comment-action" onclick="renderStaffProfile(currentStaffProfile)">Cancelar</span>';
+}
+
+function confirmDeleteStaffComentario(i){
+  postStaffUpdate('deleteComentario', { index: i }).then(resp => {
+    if(resp && resp.ok){ showToast('Comentario eliminado.', 2000); loadStaffProfile(currentStaffEmail); }
+    else showToast('No se pudo eliminar el comentario: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function addStaffCurso(){
+  const nombre = document.getElementById('newCursoNombre').value.trim();
+  const rol = document.getElementById('newCursoRol').value;
+  if(!nombre){ showToast('Escribi el nombre del curso.', 2500); return; }
+  postStaffUpdate('addCurso', { curso: nombre, rol: rol }).then(resp => {
+    if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
+    else showToast('No se pudo agregar el curso: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function removeStaffCurso(cursoEnc, rol){
+  const curso = decodeURIComponent(cursoEnc);
+  postStaffUpdate('removeCurso', { curso: curso, rol: rol }).then(resp => {
+    if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
+    else showToast('No se pudo quitar el curso: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function setStaffRating(cohortId, rating){
+  postStaffUpdate('setRating', { cohortId: cohortId, rating: rating }).then(resp => {
+    if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
+    else showToast('No se pudo guardar la calificacion: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+</script>
+</body>
+</html>
