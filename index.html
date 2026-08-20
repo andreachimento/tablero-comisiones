@@ -386,11 +386,11 @@ const COLUMNS = [
   {key:'days', label:'Dias de Semana', filter:true},
   {key:'horaInicio', label:'Hora Inicio', filter:true},
   {key:'horaFin', label:'Hora Fin', filter:true},
+  {key:'postulantesCount', label:'Postulantes', filter:false},
   {key:'isSoldOut', label:'Sold Out', filter:true, fmt:v=>v?'SI':'NO'},
   {key:'students', label:'Estudiantes', filter:false},
   {key:'modalidad', label:'Modalidad', filter:true},
   {key:'pais', label:'Pais', filter:true},
-  {key:'postulantesCount', label:'Postulantes', filter:false},
 ];
 
 let filters = {};
@@ -754,11 +754,11 @@ function applyFilters(){
       + '<td>' + r.days + '</td>'
       + '<td>' + r.horaInicio + '</td>'
       + '<td>' + r.horaFin + '</td>'
+      + '<td>' + postuBadge + '</td>'
       + '<td>' + (r.isSoldOut ? '<span class="badge tag-soldout-si">SI</span>' : '<span class="tag-soldout-no">NO</span>') + '</td>'
       + '<td><span class="estudiantes" style="background:' + bg + ';color:' + color + '">' + r.students + '</span></td>'
       + '<td><span class="modalidad-tag">' + r.modalidad + '</span></td>'
       + '<td class="pais-tag">' + r.pais + '</td>'
-      + '<td>' + postuBadge + '</td>'
       + '</tr>';
     if(expanded){
       row += '<tr class="expand-row"><td colspan="15">' + renderPostulantesPanel(r) + '</td></tr>';
