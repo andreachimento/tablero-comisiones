@@ -23,6 +23,7 @@
 
 const { getOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
 const { minutesOfDay, classifyOverlap, computeColorReason } = require('../lib/elegibilidad');
+const { getPostHogRatings } = require('../lib/posthog');
 
 const TZ = 'America/Argentina/Buenos_Aires';
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
@@ -238,7 +239,27 @@ module.exports = async function handler(req, res) {
     historial = asignadas.concat(enCurso, finalizadas);
 
     const ratingVals = Object.values(overlay.ratings || {}).filter(v => typeof v === 'number' && v > 0);
-    const ratingPromedio = ratingVals.length ? Math.round((ratingVals.reduce((a, b) => a + b, 0) / ratingVals.length) * 10) / 10 : null;
+    const ratingManualPromedio = ratingVals.length ? Math.round((ratingVals.reduce((a, b) => a + b, 0) / ratingVals.length) * 10) / 10 : null;
+
+    // Rating real, sacado de la encuesta "Live Class Rating" de PostHog (ver
+    // lib/posthog.js para el detalle de como se calcula). Se usa como
+    // fuente principal; si todavia no hay ninguna respuesta de encuesta que
+    // le corresponda a esta persona, se cae al rating manual viejo (si lo
+    // tenia cargado) en vez de mostrar "sin datos" de golpe.
+    let ratingPromedio = ratingManualPromedio;
+    let ratingCount = ratingVals.length;
+    let ratingSource = ratingManualPromedio != null ? 'manual' : null;
+    try {
+      const misComisiones = Array.from(new Set(historial.map(h => h.comisionNumber).filter(v => v != null)));
+      const misMails = Array.from(new Set([email].concat(accounts.map(a => a.email))));
+      const phRatings = await getPostHogRatings([{ key: email, emails: misMails, commissionNumbers: misComisiones }]);
+      const ph = phRatings[email];
+      if (ph && ph.ratingCount > 0) {
+        ratingPromedio = ph.ratingPromedio;
+        ratingCount = ph.ratingCount;
+        ratingSource = 'posthog';
+      }
+    } catch (e) { /* si falla PostHog (env vars, red, etc.) seguimos con el rating manual */ }
 
     // Postulaciones que hizo esta persona desde el sitio publico de
     // postulaciones (a cualquiera de sus mails, por eso se compara por
@@ -300,7 +321,8 @@ module.exports = async function handler(req, res) {
       comentarios: overlay.comentarios || [],
       cursosHabilitados: overlay.cursosHabilitados || [],
       ratingPromedio,
-      ratingCount: ratingVals.length,
+      ratingCount,
+      ratingSource,
       historial,
       postulaciones,
       overlayError,
