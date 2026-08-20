@@ -11,6 +11,7 @@
 
 const { getOverlay, personKey, getAllPostulaciones, getAccountsForPerson } = require('../lib/overlay');
 const { DAYS_MAP, ROLE_LABEL, CLASS_DURATION_MS, dateDMY, timeHM, minutesOfDay, classifyOverlap, computeColorReason } = require('../lib/elegibilidad');
+const { getPostHogRatings } = require('../lib/posthog');
 
 function getEnv() {
   const BASE = process.env.BACKOFFICE_API_URL;
@@ -56,6 +57,10 @@ async function fetchAssignmentsForAccount(env, userId) {
 // Trae, para una persona (sus cuentas ya resueltas), sus asignaciones
 // vigentes (asignada/en_curso) en comisiones DISTINTAS a `excludeCohortId`,
 // con toda la info que hace falta para el cruce de horarios y el tooltip.
+// De paso devuelve TAMBIEN los numeros de TODAS sus comisiones (incluidas
+// las finalizadas) - no hace falta pedir nada extra, ya se bajaron al
+// buscar las asignaciones - para poder cruzarlas con el rating real de
+// PostHog (que puede tener respuestas de comisiones ya terminadas).
 async function fetchVigentes(env, accounts, excludeCohortId) {
   const assignmentsByAccount = await Promise.all(accounts.map(a => fetchAssignmentsForAccount(env, a.id)));
   let assignments = assignmentsByAccount.flat().filter(a => a.status !== 'CANCELLED' && a.cohortId !== excludeCohortId);
@@ -80,9 +85,12 @@ async function fetchVigentes(env, accounts, excludeCohortId) {
   const productTitle = Object.fromEntries(productEntries);
 
   const now = new Date();
-  return assignments.map(a => {
+  const allCommissionNumbers = [];
+  const vigentes = assignments.map(a => {
     const c = cohortById[a.cohortId];
     if (!c || c.status === 'CANCELLED') return null;
+    if (c.commissionNumber != null) allCommissionNumbers.push(c.commissionNumber);
+
     const startAR = c.startDate ? new Date(c.startDate) : null;
     const endAR = c.endDate ? new Date(c.endDate) : null;
     let estadoComision;
@@ -110,6 +118,7 @@ async function fetchVigentes(env, accounts, excludeCohortId) {
       endMin: startMin + 120,
     };
   }).filter(Boolean);
+  return { vigentes, allCommissionNumbers };
 }
 
 module.exports = async function handler(req, res) {
@@ -146,44 +155,76 @@ module.exports = async function handler(req, res) {
       endMin: targetStartMin + 120,
     };
 
-    const postulantes = await Promise.all(postulacionesCohort.map(async (p) => {
+    // Primera pasada: juntamos overlay + agenda de cada postulante (esto ya
+    // se pedia antes). Todavia no calculamos el rating final aca, porque
+    // preferimos pedirle a PostHog el rating de TODOS los postulantes de
+    // esta comision en una sola consulta (se cachea 15 min en lib/posthog.js)
+    // en vez de una consulta por postulante.
+    const datos = await Promise.all(postulacionesCohort.map(async (p) => {
       const key = personKey(p.email);
       let overlay = null;
       try { overlay = await getOverlay(key); } catch (e) { /* seguimos sin overlay */ }
       const estadoOverlay = (overlay && overlay.estado) || 'aprobado';
       const ratingVals = Object.values((overlay && overlay.ratings) || {}).filter(v => typeof v === 'number' && v > 0);
-      const ratingPromedio = ratingVals.length ? Math.round((ratingVals.reduce((a, b) => a + b, 0) / ratingVals.length) * 10) / 10 : null;
+      const ratingManualPromedio = ratingVals.length ? Math.round((ratingVals.reduce((a, b) => a + b, 0) / ratingVals.length) * 10) / 10 : null;
 
       let accounts = null;
       try { accounts = await getAccountsForPerson(key); } catch (e) { /* cache fria */ }
       accounts = accounts || [];
 
       let vigentes = [];
+      let allCommissionNumbers = [];
       let datosIncompletos = !accounts.length; // sin cuentas indexadas todavia -> no podemos chequear superposicion real
       if (accounts.length) {
         try {
-          vigentes = await fetchVigentes(env, accounts, cohortId);
+          const r = await fetchVigentes(env, accounts, cohortId);
+          vigentes = r.vigentes;
+          allCommissionNumbers = r.allCommissionNumbers;
         } catch (e) {
           datosIncompletos = true;
         }
       }
 
-      const overlapCheck = classifyOverlap(target, vigentes);
-      const { color, reason: baseReason } = computeColorReason(estadoOverlay, overlapCheck, ratingPromedio);
-      const reason = datosIncompletos && color !== 'rojo' ? (baseReason + ' (no se pudo verificar su agenda completa)') : baseReason;
+      return { p, key, estadoOverlay, ratingManualPromedio, ratingManualCount: ratingVals.length, accounts, vigentes, allCommissionNumbers, datosIncompletos };
+    }));
 
-      const enCurso = vigentes.filter(a => a.estadoComision === 'en_curso');
-      const aFuturo = vigentes.filter(a => a.estadoComision === 'asignada');
+    // Un solo pedido a PostHog para el rating real de todos los postulantes
+    // de esta comision juntos. Si falla (env vars, red, PostHog caido), cada
+    // uno sigue con su rating manual (si lo tenia cargado) - no rompe nada.
+    let postHogRatings = {};
+    try {
+      postHogRatings = await getPostHogRatings(datos.map(d => ({
+        key: d.key,
+        emails: Array.from(new Set([d.key].concat(d.accounts.map(a => a.email)))),
+        commissionNumbers: d.allCommissionNumbers,
+      })));
+    } catch (e) { /* seguimos con el rating manual de cada uno */ }
+
+    const postulantes = datos.map(d => {
+      const ph = postHogRatings[d.key];
+      const usaPostHog = ph && ph.ratingCount > 0;
+      const ratingPromedio = usaPostHog ? ph.ratingPromedio : d.ratingManualPromedio;
+      const ratingCount = usaPostHog ? ph.ratingCount : d.ratingManualCount;
+      const ratingSource = usaPostHog ? 'posthog' : (d.ratingManualPromedio != null ? 'manual' : null);
+
+      const overlapCheck = classifyOverlap(target, d.vigentes);
+      const { color, reason: baseReason } = computeColorReason(d.estadoOverlay, overlapCheck, ratingPromedio);
+      const reason = d.datosIncompletos && color !== 'rojo' ? (baseReason + ' (no se pudo verificar su agenda completa)') : baseReason;
+
+      const enCurso = d.vigentes.filter(a => a.estadoComision === 'en_curso');
+      const aFuturo = d.vigentes.filter(a => a.estadoComision === 'asignada');
 
       return {
-        id: p.id,
-        email: key,
-        nombre: p.nombre || key.split('@')[0],
-        rol: p.rol,
-        fecha: p.fecha,
-        estadoPostulacion: p.estado,
+        id: d.p.id,
+        email: d.key,
+        nombre: d.p.nombre || d.key.split('@')[0],
+        rol: d.p.rol,
+        fecha: d.p.fecha,
+        estadoPostulacion: d.p.estado,
         ratingPromedio,
-        estadoOverlay,
+        ratingCount,
+        ratingSource,
+        estadoOverlay: d.estadoOverlay,
         color,
         reason,
         tooltip: {
@@ -191,7 +232,7 @@ module.exports = async function handler(req, res) {
           futuro: aFuturo.map(a => ({ txt: '#' + a.comisionNumber + ' ' + a.curso + ' (' + a.rol + ') — inicia ' + a.fechaInicio })),
         },
       };
-    }));
+    });
 
     res.status(200).json({ cohortId, comisionNumber: targetCohort.commissionNumber, postulantes });
   } catch (err) {
