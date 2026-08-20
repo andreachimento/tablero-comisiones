@@ -788,7 +788,7 @@ function renderPostulantesPanel(r){
     const key = r.cohortId + '-' + i;
     window.__eligTooltipData[key] = { nombre: p.nombre, tooltip: p.tooltip || { curso: [], futuro: [] } };
     const ratingHtml = p.ratingPromedio != null
-      ? ('<span class="stars">' + starsHtml(p.ratingPromedio) + '</span> ' + p.ratingPromedio.toFixed(1))
+      ? ('<span class="stars">' + starsHtml(p.ratingPromedio) + '</span> ' + p.ratingPromedio.toFixed(1) + (p.ratingSource === 'manual' ? ' <span class="no-rating">(dato manual)</span>' : ''))
       : '<span class="no-rating">Sin rating</span>';
     return '<div class="postu-card c-' + p.color + '">'
       + '<span class="postu-dot"></span>'
@@ -969,7 +969,9 @@ function applyStaffFilters(){
   tbody.innerHTML = rows.map((p, idx) => {
     const roleTags = (p.roles || []).map(r => '<span class="role-tag role-' + r + '">' + (ROLE_LABELS[r] || r) + '</span>').join('');
     const dashBadge = p.source === 'dash' ? ' <span class="dash-badge">Extraido de Dash</span>' : '';
-    const ratingCell = p.ratingPromedio != null ? ('★ ' + p.ratingPromedio) : '<span class="no-rating">Sin comisiones aun</span>';
+    const ratingCell = p.ratingPromedio != null
+      ? ('★ ' + p.ratingPromedio + (p.ratingSource === 'manual' ? ' <span class="no-rating">(manual)</span>' : ''))
+      : '<span class="no-rating">Sin datos aun</span>';
     return '<tr data-idx="' + idx + '">'
       + '<td class="staff-name">' + escapeHtml(p.nombre) + dashBadge + '</td>'
       + '<td>' + escapeHtml(p.email) + '</td>'
@@ -1066,8 +1068,11 @@ function renderStaffProfile(p){
   html += '<div class="profile-header"><div class="avatar">' + initials(fullName) + '</div>'
     + '<div><h1>' + escapeHtml(fullName) + dashBadge + '</h1><div class="mail">' + escapeHtml(p.email) + cuentasNote + '</div></div>';
   if(p.ratingPromedio != null){
+    const esManual = p.ratingSource === 'manual';
+    const unidad = esManual ? 'comision' : 'encuesta';
+    const ratingFuente = esManual ? ' <span class="no-rating">(dato manual, todavia sin respuestas de encuesta)</span>' : '';
     html += '<div class="overall-rating"><div class="stars-big">' + starsHtml(p.ratingPromedio) + '</div>'
-      + '<div class="rating-num">' + p.ratingPromedio + ' / 5 &middot; promedio de ' + p.ratingCount + ' comision' + (p.ratingCount === 1 ? '' : 'es') + ' calificada' + (p.ratingCount === 1 ? '' : 's') + '</div></div>';
+      + '<div class="rating-num">' + p.ratingPromedio + ' / 5 &middot; promedio de ' + p.ratingCount + ' ' + unidad + (p.ratingCount === 1 ? '' : (esManual ? 'es' : 's')) + (esManual ? ' calificada' : ' respondida') + (p.ratingCount === 1 ? '' : 's') + ratingFuente + '</div></div>';
   }
   html += '</div>';
 
