@@ -28,6 +28,7 @@
 
 const { getAllOverlays, defaultOverlay, personKey, mergeOverlays, setAccountsIndexBulk, deleteOverlayEntries, OVERLAY_KEY } = require('../lib/overlay');
 const { getRedis } = require('../lib/redis');
+const { getPostHogRatings } = require('../lib/posthog');
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
@@ -244,7 +245,7 @@ module.exports = async function handler(req, res) {
       if (Object.keys(accountsIndexUpdates).length) await setAccountsIndexBulk(accountsIndexUpdates);
     } catch (e) { /* se reintenta solo en la proxima carga */ }
 
-    const staff = Object.keys(groups).map(key => {
+    const staffBase = Object.keys(groups).map(key => {
       const g = groups[key];
       const ov = finalOverlayByKey[key] || defaultOverlay();
       const cursos = ov.cursosHabilitados || [];
@@ -265,8 +266,40 @@ module.exports = async function handler(req, res) {
         estado: ov.estado || 'aprobado',
         cursosHabilitados: cursos,
         roles,
-        ratingPromedio: avgRating(ov.ratings),
-        ratingCount: ratingVals.length,
+        ratingManualPromedio: avgRating(ov.ratings),
+        ratingManualCount: ratingVals.length,
+        _accountEmails: g.accounts.map(a => a.email),
+      };
+    });
+
+    // Rating real (PostHog), para todo el listado en una sola consulta
+    // (cacheada 15 min en lib/posthog.js). OJO: aca solo se puede cruzar por
+    // mail (filas nuevas de la encuesta, que ya traen el mail del profesor) -
+    // el puente por numero de comision (filas viejas de la encuesta) no esta
+    // disponible en este listado porque, a proposito, no se trae el
+    // historial de comisiones de cada persona aca (es lo que tarda mas y por
+    // eso se pide aparte, solo al abrir el perfil - ver comentario arriba).
+    // Quien todavia no tenga ninguna respuesta "nueva" en PostHog sigue
+    // viendo su rating manual (si lo tenia) hasta que entre a su perfil,
+    // donde si se hace el cruce completo.
+    let postHogRatings = {};
+    try {
+      postHogRatings = await getPostHogRatings(staffBase.map(s => ({
+        key: s.email,
+        emails: Array.from(new Set([s.email].concat(s._accountEmails))),
+        commissionNumbers: [],
+      })));
+    } catch (e) { /* seguimos con el rating manual de cada uno */ }
+
+    const staff = staffBase.map(s => {
+      const ph = postHogRatings[s.email];
+      const usaPostHog = ph && ph.ratingCount > 0;
+      const { _accountEmails, ratingManualPromedio, ratingManualCount, ...rest } = s;
+      return {
+        ...rest,
+        ratingPromedio: usaPostHog ? ph.ratingPromedio : ratingManualPromedio,
+        ratingCount: usaPostHog ? ph.ratingCount : ratingManualCount,
+        ratingSource: usaPostHog ? 'posthog' : (ratingManualPromedio != null ? 'manual' : null),
       };
     });
 
