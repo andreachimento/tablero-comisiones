@@ -15,15 +15,6 @@
     "api/admin-seed-staff.js": {
       "maxDuration": 30
     },
-    "api/public-comisiones-abiertas.js": {
-      "maxDuration": 60
-    },
-    "api/public-cursos-habilitados.js": {
-      "maxDuration": 10
-    },
-    "api/public-postular.js": {
-      "maxDuration": 15
-    },
     "api/comision-postulantes.js": {
       "maxDuration": 30
     }
