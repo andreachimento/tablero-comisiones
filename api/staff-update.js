@@ -7,6 +7,14 @@
 
 const { getOverlay, setOverlay } = require('../lib/overlay');
 
+// Valores permitidos para la disponibilidad (dias y franjas horarias que
+// contesta la gente en la encuesta que va a mandar Andrea). Se cargan a
+// mano en el perfil por ahora, en base a esas respuestas. Si el equipo
+// cambia las opciones de la encuesta, hay que actualizar esta misma lista
+// en index.html (donde se muestran los checkboxes).
+const DIAS_DISPONIBLES = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+const FRANJAS_DISPONIBLES = ['7:30-10:00hs', '10:00-12:00hs', '11:00-13:00hs', '18:30-21:00hs', '19:00-21:00hs', '20:30-22:30hs'];
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Metodo no permitido, usar POST' });
@@ -32,6 +40,7 @@ module.exports = async function handler(req, res) {
     overlay.comentarios = overlay.comentarios || [];
     overlay.cursosHabilitados = overlay.cursosHabilitados || [];
     overlay.ratings = overlay.ratings || {};
+    overlay.disponibilidad = overlay.disponibilidad || { dias: [], franjas: [] };
 
     switch (action) {
       case 'setEstado': {
@@ -105,6 +114,12 @@ module.exports = async function handler(req, res) {
           return;
         }
         overlay.ratings[cohortId] = rating;
+        break;
+      }
+      case 'setDisponibilidad': {
+        const dias = Array.isArray(payload.dias) ? payload.dias.filter(d => DIAS_DISPONIBLES.includes(d)) : [];
+        const franjas = Array.isArray(payload.franjas) ? payload.franjas.filter(f => FRANJAS_DISPONIBLES.includes(f)) : [];
+        overlay.disponibilidad = { dias, franjas };
         break;
       }
       case 'setNombreDash': {
