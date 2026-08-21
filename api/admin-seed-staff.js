@@ -12,7 +12,7 @@
 // para el funcionamiento normal del tablero).
 // ============================================================================
 
-const { getAllOverlays, defaultOverlay, OVERLAY_KEY } = require('../lib/overlay');
+const { getAllOverlays, defaultOverlay, personKey, OVERLAY_KEY } = require('../lib/overlay');
 const { getRedis } = require('../lib/redis');
 const seed = require('../data/seed-staff.json');
 
@@ -29,11 +29,26 @@ module.exports = async function handler(req, res) {
     let created = 0, merged = 0, cursosAgregados = 0;
     const updates = {};
 
-    for (const entry of seed) {
-      const email = String(entry.email || '').toLowerCase().trim();
-      if (!email) continue;
+    // IMPORTANTE: se agrupa por personKey (mail sin el "+tag"), no por el
+    // mail tal cual viene en el Excel. Una misma persona suele aparecer en
+    // el Excel varias veces con distinto "+tag" (ej. una fila para su rol
+    // de profesor, otra para tutor) - si se guardara cada fila por separado
+    // quedarian varias entradas sueltas para la misma persona en vez de una
+    // sola unificada (el listado de Staff las termina unificando de todos
+    // modos la primera vez que se abre, pero mejor guardarlas ya unificadas
+    // desde el importador para no depender de ese paso extra).
+    const porPersona = {};
+    seed.forEach(entry => {
+      const rawEmail = String(entry.email || '').toLowerCase().trim();
+      if (!rawEmail) return;
+      const key = personKey(rawEmail);
+      if (!porPersona[key]) porPersona[key] = [];
+      porPersona[key].push(entry);
+    });
 
-      let overlay = existing[email];
+    Object.keys(porPersona).forEach(key => {
+      const entradas = porPersona[key];
+      let overlay = existing[key];
       if (overlay) {
         merged++;
       } else {
@@ -41,20 +56,22 @@ module.exports = async function handler(req, res) {
         created++;
       }
 
-      overlay.esDash = overlay.esDash || !!entry.esDash;
-      if (entry.esDash) {
-        if (!overlay.nombre) overlay.nombre = entry.nombre || '';
-        if (!overlay.apellido) overlay.apellido = entry.apellido || '';
-      }
-
       overlay.cursosHabilitados = overlay.cursosHabilitados || [];
-      (entry.cursosHabilitados || []).forEach(c => {
-        const yaExiste = overlay.cursosHabilitados.some(x => x.curso.toLowerCase() === c.curso.toLowerCase() && x.rol === c.rol);
-        if (!yaExiste) { overlay.cursosHabilitados.push(c); cursosAgregados++; }
+
+      entradas.forEach(entry => {
+        overlay.esDash = overlay.esDash || !!entry.esDash;
+        if (entry.esDash) {
+          if (!overlay.nombre) overlay.nombre = entry.nombre || '';
+          if (!overlay.apellido) overlay.apellido = entry.apellido || '';
+        }
+        (entry.cursosHabilitados || []).forEach(c => {
+          const yaExiste = overlay.cursosHabilitados.some(x => x.curso.toLowerCase() === c.curso.toLowerCase() && x.rol === c.rol);
+          if (!yaExiste) { overlay.cursosHabilitados.push(c); cursosAgregados++; }
+        });
       });
 
-      updates[email] = JSON.stringify(overlay);
-    }
+      updates[key] = JSON.stringify(overlay);
+    });
 
     // Escribimos todo en tandas de 200 campos por llamada (en vez de una
     // llamada de red por persona) para que esto termine en pocos segundos.
