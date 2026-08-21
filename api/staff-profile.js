@@ -21,9 +21,16 @@
 // sin tener que recorrer datos de las 700+ personas del back office.
 // ============================================================================
 
-const { getOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
-const { minutesOfDay, classifyOverlap, computeColorReason } = require('../lib/elegibilidad');
+const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
+const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
+
+// Cuando ya dicto un curso (aparece en su historial real de comisiones), se
+// lo da por habilitado a dictarlo aunque nadie lo haya cargado a mano en el
+// Excel - si lo dicto, es porque puede. Solo se consideran los mismos dos
+// roles que se pueden cargar a mano (Profesor / Tutor Adjunto); un
+// reemplazo puntual como Suplente no alcanza por si solo.
+const ROL_HISTORIAL_A_HABILITADO = { Profesor: 'profesor', 'Tutor Adjunto': 'tutor' };
 
 const TZ = 'America/Argentina/Buenos_Aires';
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
@@ -214,6 +221,8 @@ module.exports = async function handler(req, res) {
           fechaInicioISO: startAR ? dateISO(startAR) : '',
           fechaFin: endAR ? dateDMY(endAR) : '',
           dia: (c.weekDays || []).slice().sort().map(d => DAYS_MAP[d] || '').join('/'),
+          horaInicio: startAR ? timeHM(startAR) : '',
+          horaFin: startAR ? timeHM(new Date(startAR.getTime() + CLASS_DURATION_MS)) : '',
           rol: ROLE_LABEL[a.cohortRole] || a.cohortRole || '',
           tipoAsignacion,
           estadoComision,
@@ -237,6 +246,24 @@ module.exports = async function handler(req, res) {
     const enCurso = historial.filter(h => h.estadoComision === 'en_curso').sort((a, b) => a.fechaInicioISO.localeCompare(b.fechaInicioISO));
     const finalizadas = historial.filter(h => h.estadoComision === 'finalizada').sort((a, b) => b.fechaInicioISO.localeCompare(a.fechaInicioISO));
     historial = asignadas.concat(enCurso, finalizadas);
+
+    // Auto-habilitacion: si ya dicto un curso de verdad (esta en su
+    // historial real), lo agregamos solo a "Cursos habilitados a dictar"
+    // aunque no estuviera cargado a mano ni en el Excel - haberlo dictado ya
+    // demuestra que puede. Si se agrega algo nuevo, se guarda de una para
+    // que tambien aparezca la proxima vez que se abra el listado de Staff
+    // (que no vuelve a mirar el historial de cada persona, por velocidad).
+    overlay.cursosHabilitados = overlay.cursosHabilitados || [];
+    let cursosNuevosPorHistorial = false;
+    historial.forEach(h => {
+      const rolHabilitado = ROL_HISTORIAL_A_HABILITADO[h.rol];
+      if (!rolHabilitado || !h.curso) return;
+      const yaExiste = overlay.cursosHabilitados.some(c => String(c.curso || '').toLowerCase() === h.curso.toLowerCase() && c.rol === rolHabilitado);
+      if (!yaExiste) { overlay.cursosHabilitados.push({ curso: h.curso, rol: rolHabilitado }); cursosNuevosPorHistorial = true; }
+    });
+    if (cursosNuevosPorHistorial && !overlayError) {
+      try { await setOverlay(email, overlay); } catch (e) { /* si no se pudo guardar, se vuelve a intentar la proxima vez que se abra este perfil */ }
+    }
 
     const ratingVals = Object.values(overlay.ratings || {}).filter(v => typeof v === 'number' && v > 0);
     const ratingManualPromedio = ratingVals.length ? Math.round((ratingVals.reduce((a, b) => a + b, 0) / ratingVals.length) * 10) / 10 : null;
@@ -320,6 +347,7 @@ module.exports = async function handler(req, res) {
       estado: overlay.estado || 'aprobado',
       comentarios: overlay.comentarios || [],
       cursosHabilitados: overlay.cursosHabilitados || [],
+      disponibilidad: overlay.disponibilidad || { dias: [], franjas: [] },
       ratingPromedio,
       ratingCount,
       ratingSource,
