@@ -194,6 +194,11 @@
   .curso-rol-label:first-child { margin-top: 0; }
   .cuentas-note { font-size: 11px; color: var(--ink-soft); font-style: italic; }
   .remove-x { color: var(--red); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+  .disp-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); margin: 12px 0 6px; }
+  .disp-label:first-of-type { margin-top: 0; }
+  .disp-check-row { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 4px; }
+  .disp-check { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; }
+  .disp-check input { cursor: pointer; }
 
   .hist-group-label { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-soft); margin: 14px 0 6px; }
   .hist-group-label:first-child { margin-top: 0; }
@@ -347,6 +352,12 @@
       <option value="aprobado">Aprobado</option>
       <option value="desaprobado">Desaprobado</option>
       <option value="futuro">Consideracion futura</option>
+    </select>
+    <select id="fDiaDisponible" onchange="applyStaffFilters()">
+      <option value="">Cualquier dia disponible</option>
+    </select>
+    <select id="fHorarioDisponible" onchange="applyStaffFilters()">
+      <option value="">Cualquier horario disponible</option>
     </select>
     <button class="btn-add" style="margin-top:0;" onclick="copyStaffEmails()">&#128203; Copiar mails</button>
     <span class="result-count" id="staffCount"></span>
@@ -891,6 +902,10 @@ let allCourseNames = [];
 
 const ROLE_LABELS = { profesor: 'Profesor', tutor: 'Tutor Adjunto' };
 const ESTADO_LABELS = { aprobado: 'Aprobado', desaprobado: 'Desaprobado', futuro: 'Consideracion futura' };
+// Mismas listas que api/staff-update.js (DIAS_DISPONIBLES / FRANJAS_DISPONIBLES) -
+// si cambian las opciones de la encuesta de disponibilidad, actualizar en los dos lados.
+const DIAS_DISPONIBLES = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+const FRANJAS_DISPONIBLES = ['7:30-10:00hs', '10:00-12:00hs', '11:00-13:00hs', '18:30-21:00hs', '19:00-21:00hs', '20:30-22:30hs'];
 
 function showTab(tab){
   document.getElementById('tab-comisiones').classList.toggle('active', tab === 'comisiones');
@@ -923,6 +938,7 @@ function loadStaffList(){
         showToast('Ojo: todavia no esta conectada la base de datos (' + payload.overlayError + ')', 6000);
       }
       buildStaffCourseFilter();
+      buildStaffDisponibilidadFilters();
       applyStaffFilters();
     })
     .catch(err => {
@@ -941,12 +957,25 @@ function buildStaffCourseFilter(){
   document.getElementById('cursoDatalist').innerHTML = allCourseNames.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">').join('');
 }
 
+function buildStaffDisponibilidadFilters(){
+  const selDia = document.getElementById('fDiaDisponible');
+  const selHorario = document.getElementById('fHorarioDisponible');
+  if(selDia.options.length <= 1){
+    selDia.innerHTML += DIAS_DISPONIBLES.map(d => '<option value="' + d + '">' + d + '</option>').join('');
+  }
+  if(selHorario.options.length <= 1){
+    selHorario.innerHTML += FRANJAS_DISPONIBLES.map(f => '<option value="' + f + '">' + f + '</option>').join('');
+  }
+}
+
 function applyStaffFilters(){
   const nombre = document.getElementById('fNombre').value.toLowerCase().trim();
   const mail = document.getElementById('fMail').value.toLowerCase().trim();
   const rol = document.getElementById('fRol').value;
   const curso = document.getElementById('fCurso').value;
   const estado = document.getElementById('fEstado').value;
+  const diaDisponible = document.getElementById('fDiaDisponible').value;
+  const horarioDisponible = document.getElementById('fHorarioDisponible').value;
 
   let rows = STAFF.filter(p => {
     if(nombre && !p.nombre.toLowerCase().includes(nombre)) return false;
@@ -954,6 +983,8 @@ function applyStaffFilters(){
     if(rol && !(p.roles || []).includes(rol)) return false;
     if(curso && !(p.cursosHabilitados || []).some(c => c.curso === curso)) return false;
     if(estado && p.estado !== estado) return false;
+    if(diaDisponible && !((p.disponibilidad && p.disponibilidad.dias) || []).includes(diaDisponible)) return false;
+    if(horarioDisponible && !((p.disponibilidad && p.disponibilidad.franjas) || []).includes(horarioDisponible)) return false;
     return true;
   });
   rows.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -1136,6 +1167,18 @@ function renderStaffProfile(p){
   }
   html += '</div>';
 
+  html += '<div class="card"><h3>Disponibilidad</h3>'
+    + '<p style="font-size:11px;color:var(--ink-soft);font-style:italic;margin-bottom:10px;">Segun lo que respondio en la encuesta. Tildar los dias y franjas horarias que indico y guardar.</p>';
+  const disp = p.disponibilidad || { dias: [], franjas: [] };
+  html += '<div class="disp-label">Dias disponibles</div><div class="disp-check-row">'
+    + DIAS_DISPONIBLES.map(d => '<label class="disp-check"><input type="checkbox" class="dispDiaCheck" value="' + d + '"' + (disp.dias.includes(d) ? ' checked' : '') + '>' + d + '</label>').join('')
+    + '</div>';
+  html += '<div class="disp-label">Franjas horarias disponibles</div><div class="disp-check-row">'
+    + FRANJAS_DISPONIBLES.map(f => '<label class="disp-check"><input type="checkbox" class="dispFranjaCheck" value="' + f + '"' + (disp.franjas.includes(f) ? ' checked' : '') + '>' + f + '</label>').join('')
+    + '</div>';
+  html += '<button class="btn-add" onclick="saveStaffDisponibilidad()">Guardar disponibilidad</button>';
+  html += '</div>';
+
   html += '</div>'; // fin columna izquierda
 
   html += '<div class="card"><h3>Historial de comisiones <span class="live-note"><span class="live-dot"></span>En vivo</span></h3>';
@@ -1154,7 +1197,7 @@ function renderStaffProfile(p){
     items.forEach(h => {
       const tipoClass = h.tipoAsignacion === 'Suplente' ? 'tipo-suplente' : (h.tipoAsignacion === 'Reemplazo' ? 'tipo-reemplazo' : 'tipo-titular');
       html += '<div class="hist-item ' + g.itemClass + '"><div class="com-left"><span class="com-curso">' + escapeHtml(h.curso) + ' <span class="com-num">#' + h.comisionNumber + '</span></span>'
-        + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span></div>'
+        + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Horario: ' + (h.horaInicio ? (h.horaInicio + ' a ' + h.horaFin) : '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span></div>'
         + '<div class="hist-right"><span class="hist-status ' + g.statusClass + '">' + g.statusLabel + '</span>';
       if(g.key === 'finalizada'){
         html += '<span class="stars-small" data-cohort="' + h.cohortId + '" data-rating="' + (h.rating || 0) + '"></span>';
@@ -1277,6 +1320,15 @@ function setStaffRating(cohortId, rating){
   postStaffUpdate('setRating', { cohortId: cohortId, rating: rating }).then(resp => {
     if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
     else showToast('No se pudo guardar la calificacion: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function saveStaffDisponibilidad(){
+  const dias = Array.from(document.querySelectorAll('.dispDiaCheck:checked')).map(el => el.value);
+  const franjas = Array.from(document.querySelectorAll('.dispFranjaCheck:checked')).map(el => el.value);
+  postStaffUpdate('setDisponibilidad', { dias: dias, franjas: franjas }).then(resp => {
+    if(resp && resp.ok){ showToast('Disponibilidad guardada.', 2000); loadStaffProfile(currentStaffEmail); }
+    else showToast('No se pudo guardar la disponibilidad: ' + ((resp && resp.error) || ''), 4000);
   });
 }
 
