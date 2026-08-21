@@ -266,6 +266,7 @@ module.exports = async function handler(req, res) {
         estado: ov.estado || 'aprobado',
         cursosHabilitados: cursos,
         roles,
+        disponibilidad: ov.disponibilidad || { dias: [], franjas: [] },
         ratingManualPromedio: avgRating(ov.ratings),
         ratingManualCount: ratingVals.length,
         _accountEmails: g.accounts.map(a => a.email),
