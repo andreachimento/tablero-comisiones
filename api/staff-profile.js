@@ -22,7 +22,7 @@
 // ============================================================================
 
 const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
-const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason } = require('../lib/elegibilidad');
+const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason, cursoMatches } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 
 // Cuando ya dicto un curso (aparece en su historial real de comisiones), se
@@ -258,7 +258,7 @@ module.exports = async function handler(req, res) {
     historial.forEach(h => {
       const rolHabilitado = ROL_HISTORIAL_A_HABILITADO[h.rol];
       if (!rolHabilitado || !h.curso) return;
-      const yaExiste = overlay.cursosHabilitados.some(c => String(c.curso || '').toLowerCase() === h.curso.toLowerCase() && c.rol === rolHabilitado);
+      const yaExiste = overlay.cursosHabilitados.some(c => cursoMatches(c.curso, h.curso) && c.rol === rolHabilitado);
       if (!yaExiste) { overlay.cursosHabilitados.push({ curso: h.curso, rol: rolHabilitado }); cursosNuevosPorHistorial = true; }
     });
     if (cursosNuevosPorHistorial && !overlayError) {
@@ -315,10 +315,21 @@ module.exports = async function handler(req, res) {
       });
 
       if (postulaciones.length) {
-        const targets = await Promise.all(postulaciones.map(p => apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts/${p.cohortId}`, env.STUDENT_KEY)));
+        const targets = await Promise.all(postulaciones.map(p => (p.cohortId ? apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts/${p.cohortId}`, env.STUDENT_KEY) : Promise.resolve(null))));
         postulaciones = postulaciones.map((p, i) => {
+          // Si la persona no esta habilitada para dictar (en cualquier rol)
+          // el curso al que se postulo, la marcamos gris independientemente
+          // del resto: eso le avisa a Andrea que hay que revisarla antes de
+          // aprobarla, sin importar horarios ni rating todavia. El rol que
+          // se muestra (si la postulacion no trae uno propio, como pasa con
+          // las que llegan del formulario publico, que no lo preguntan) se
+          // completa con el que ya tenga cargado para ese mismo curso.
+          const cursoMatch = p.curso ? (overlay.cursosHabilitados || []).find(c => cursoMatches(c.curso, p.curso)) : null;
+          const habilitado = p.curso ? !!cursoMatch : true;
+          const rolMostrado = p.rol || (cursoMatch ? cursoMatch.rol : null);
+
           const c = targets[i];
-          if (!c || !c.id) return { ...p, color: null, reason: 'No se pudo verificar (la comision ya no existe)' };
+          if (!c || !c.id) return { ...p, rol: rolMostrado, habilitado, color: habilitado ? null : 'gris', reason: habilitado ? 'No se pudo verificar (la comision ya no existe)' : 'Se postuló pero no está habilitado para dictar este curso · revisar antes de aprobar' };
           const startAR = c.startDate ? new Date(c.startDate) : null;
           const endAR = c.endDate ? new Date(c.endDate) : null;
           const startMin = startAR ? minutesOfDay(startAR) : 0;
@@ -330,8 +341,8 @@ module.exports = async function handler(req, res) {
             endMin: startMin + 120,
           };
           const overlapCheck = classifyOverlap(target, vigentes.filter(v => v.comisionNumber !== c.commissionNumber));
-          const { color, reason } = computeColorReason(overlay.estado || 'aprobado', overlapCheck, ratingPromedio);
-          return { ...p, color, reason };
+          const { color, reason } = computeColorReason(overlay.estado || 'aprobado', overlapCheck, ratingPromedio, habilitado);
+          return { ...p, rol: rolMostrado, habilitado, color, reason };
         });
       }
     } catch (e) { /* si falla, mostramos el resto del perfil igual */ }
