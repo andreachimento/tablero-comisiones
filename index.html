@@ -24,6 +24,8 @@
     --amber-bg: #FFF3D6;
     --red: #d92d20;
     --red-bg: #fde8e6;
+    --gris: #6b7280;
+    --gris-bg: #eef0f2;
     --pink: #db2777;
     --pink-bg: #fce7f3;
   }
@@ -244,10 +246,12 @@
   .postu-card.c-verde { background: var(--green-bg); border-color: #bfe9d9; }
   .postu-card.c-naranja { background: var(--amber-bg); border-color: #f2ddaa; }
   .postu-card.c-rojo { background: var(--red-bg); border-color: #f5c6c1; }
+  .postu-card.c-gris { background: var(--gris-bg); border-color: #d7dade; }
   .postu-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
   .c-verde .postu-dot { background: var(--green); }
   .c-naranja .postu-dot { background: var(--amber); }
   .c-rojo .postu-dot { background: var(--red); }
+  .c-gris .postu-dot { background: var(--gris); }
   .postu-info { flex: 1; min-width: 0; }
   .postu-name { font-weight: 700; font-size: 12.5px; color: var(--ink); cursor: default; border-bottom: 1px dotted var(--ink-soft); display: inline-block; }
   .postu-role { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; margin-left: 5px; }
@@ -258,6 +262,7 @@
   .c-verde .postu-reason { color: var(--green); }
   .c-naranja .postu-reason { color: var(--amber); }
   .c-rojo .postu-reason { color: var(--red); }
+  .c-gris .postu-reason { color: var(--gris); }
 
   .elig-tooltip { position: fixed; background: var(--ink); color: white; border-radius: 8px; padding: 10px 12px; font-size: 11px; line-height: 1.5; max-width: 280px; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.28); display: none; }
   .elig-tooltip b { color: #fff; }
@@ -269,18 +274,22 @@
   .hist-item.elig-verde { border-left: 4px solid var(--green); }
   .hist-item.elig-naranja { border-left: 4px solid var(--amber); }
   .hist-item.elig-rojo { border-left: 4px solid var(--red); }
+  .hist-item.elig-gris { border-left: 4px solid var(--gris); }
   .elig-reason { font-size: 10.5px; margin-top: 3px; font-weight: 600; }
   .elig-verde .elig-reason { color: var(--green); }
   .elig-naranja .elig-reason { color: var(--amber); }
   .elig-rojo .elig-reason { color: var(--red); }
+  .elig-gris .elig-reason { color: var(--gris); }
   .elig-pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 10px; font-size: 10px; font-weight: 700; }
   .elig-verde .elig-pill { background: var(--green-bg); color: var(--green); }
   .elig-naranja .elig-pill { background: var(--amber-bg); color: var(--amber); }
   .elig-rojo .elig-pill { background: var(--red-bg); color: var(--red); }
+  .elig-gris .elig-pill { background: var(--gris-bg); color: var(--gris); }
   .elig-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .elig-verde .elig-dot { background: var(--green); }
   .elig-naranja .elig-dot { background: var(--amber); }
   .elig-rojo .elig-dot { background: var(--red); }
+  .elig-gris .elig-dot { background: var(--gris); }
 </style>
 </head>
 <body>
@@ -805,7 +814,7 @@ function renderPostulantesPanel(r){
       + '<span class="postu-dot"></span>'
       + '<div class="postu-info">'
       + '<span class="postu-name" data-elig-tooltip="' + key + '">' + escapeHtml(p.nombre) + '</span>'
-      + '<span class="postu-role">(' + (ROLE_LABELS[p.rol] || p.rol) + ')</span>'
+      + '<span class="postu-role">(' + (p.rol ? (ROLE_LABELS[p.rol] || p.rol) : 'rol a definir') + ')</span>'
       + '<div class="postu-rating">' + ratingHtml + '</div>'
       + '<div class="postu-reason">' + escapeHtml(p.reason || '') + '</div>'
       + '</div></div>';
@@ -1156,11 +1165,11 @@ function renderStaffProfile(p){
     html += postus.map(po => {
       const estado = po.estado || 'pendiente';
       const eligClass = po.color ? ' elig-' + po.color : '';
-      const eligPillLabel = po.color === 'verde' ? 'Puede sumarse' : (po.color === 'naranja' ? 'Con advertencia' : (po.color === 'rojo' ? 'No puede sumar' : ''));
+      const eligPillLabel = po.color === 'verde' ? 'Puede sumarse' : (po.color === 'naranja' ? 'Con advertencia' : (po.color === 'rojo' ? 'No puede sumar' : (po.color === 'gris' ? 'No habilitado' : '')));
       const eligPill = po.color ? '<span class="elig-pill"><span class="elig-dot"></span>' + eligPillLabel + '</span>' : '';
       const eligReason = po.reason ? '<span class="elig-reason">&#9679; ' + escapeHtml(po.reason) + '</span>' : '';
       return '<div class="hist-item' + eligClass + '"><div class="com-left"><span class="com-curso">' + escapeHtml(po.curso || '') + ' <span class="com-num">#' + escapeHtml(String(po.comisionNumber || '')) + '</span></span>'
-        + '<span class="com-fechas">Postulado: ' + formatFechaCorta(po.fecha) + ' &middot; Rol: ' + (ROLE_LABELS[po.rol] || po.rol) + '</span>'
+        + '<span class="com-fechas">Postulado: ' + formatFechaCorta(po.fecha) + ' &middot; Rol: ' + (po.rol ? (ROLE_LABELS[po.rol] || po.rol) : 'a definir') + '</span>'
         + eligReason + '</div>'
         + '<div class="hist-right"><span class="estado-tag estado-postulacion-' + estado + '">' + (POSTULACION_ESTADO_LABELS[estado] || estado) + '</span>' + eligPill + '</div></div>';
     }).join('');
