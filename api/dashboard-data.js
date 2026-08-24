@@ -196,7 +196,14 @@ async function buildRows() {
   try {
     const { ensureFreshSync } = require('../lib/postulacionesSync');
     await ensureFreshSync();
-  } catch (e) { /* seguimos mostrando el resto del tablero igual, con las postulaciones que ya hubiera */ }
+  } catch (e) {
+    // No debe romper el resto del tablero, pero SI se anota en los logs de
+    // Vercel (Project > Logs) para poder ver por que no esta sincronizando -
+    // sin esto, un problema de configuracion (falta una Environment
+    // Variable, la planilla no esta compartida con la cuenta de servicio,
+    // etc.) queda invisible.
+    console.error('[postulaciones-sync] fallo la sincronizacion automatica:', e && e.message ? e.message : e);
+  }
 
   // Cuantas postulaciones tiene cada comision, para mostrar el numerito en
   // la columna "Postulantes" sin tener que pedir el detalle completo (con
