@@ -29,6 +29,9 @@
     },
     "api/postulaciones-sync.js": {
       "maxDuration": 60
+    },
+    "api/disponibilidad-sync.js": {
+      "maxDuration": 30
     }
   },
   "crons": [
@@ -42,6 +45,14 @@
     },
     {
       "path": "/api/postulaciones-sync",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/disponibilidad-sync",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/disponibilidad-sync",
       "schedule": "0 18 * * *"
     }
   ]
