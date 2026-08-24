@@ -186,6 +186,18 @@ async function buildRows() {
   const productIds = Array.from(new Set(cohorts.map(c => c.productId)));
   const products = await fetchProducts(productIds, env);
 
+  // Sincroniza (si ya paso mas de una hora desde la ultima vez) las
+  // postulaciones nuevas que hayan llegado a la planilla de Google Sheets
+  // del sitio publico de postulaciones. Se hace aca, y no con un cron por
+  // hora, porque el plan gratuito de Vercel no permite crons mas seguido
+  // que una vez por dia - abrir esta pestaña (la que mas se abre) hace de
+  // "gatillo" en su lugar. Si falla (Google Sheets caido, faltan las
+  // Environment Variables, etc.) no debe romper el resto del tablero.
+  try {
+    const { ensureFreshSync } = require('../lib/postulacionesSync');
+    await ensureFreshSync();
+  } catch (e) { /* seguimos mostrando el resto del tablero igual, con las postulaciones que ya hubiera */ }
+
   // Cuantas postulaciones tiene cada comision, para mostrar el numerito en
   // la columna "Postulantes" sin tener que pedir el detalle completo (con
   // el cruce de rating/superposicion) de todas las comisiones de una.
