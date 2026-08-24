@@ -15,6 +15,9 @@
     "api/admin-seed-staff.js": {
       "maxDuration": 30
     },
+    "api/admin-seed-postulaciones.js": {
+      "maxDuration": 60
+    },
     "api/comision-postulantes.js": {
       "maxDuration": 30
     },
