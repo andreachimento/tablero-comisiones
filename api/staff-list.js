@@ -128,6 +128,18 @@ function avgRating(ratings) {
 module.exports = async function handler(req, res) {
   try {
     const env = getEnv();
+
+    // Antes de traer los overlays, nos asegura que la disponibilidad este
+    // al dia (si paso mas de una hora desde la ultima vez que se leyo la
+    // encuesta, la vuelve a leer aca mismo) - asi esta misma respuesta ya
+    // refleja las respuestas nuevas, sin depender de un cron de Vercel.
+    try {
+      const { ensureFreshDisponibilidadSync } = require('../lib/disponibilidadSync');
+      await ensureFreshDisponibilidadSync();
+    } catch (e) {
+      console.error('[disponibilidad-sync] fallo la sincronizacion automatica:', e && e.message ? e.message : e);
+    }
+
     const [instructors, overlays, assignmentUserIdsResult] = await Promise.all([
       fetchAllInstructors(env),
       getAllOverlays().catch(err => {
