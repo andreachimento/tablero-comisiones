@@ -20,12 +20,19 @@
     },
     "api/posthog-refresh.js": {
       "maxDuration": 30
+    },
+    "api/postulaciones-sync.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/posthog-refresh",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/postulaciones-sync",
+      "schedule": "0 7 * * *"
     }
   ]
 }
