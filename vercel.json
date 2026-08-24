@@ -18,6 +18,9 @@
     "api/admin-seed-postulaciones.js": {
       "maxDuration": 60
     },
+    "api/admin-seed-disponibilidad.js": {
+      "maxDuration": 30
+    },
     "api/comision-postulantes.js": {
       "maxDuration": 30
     },
