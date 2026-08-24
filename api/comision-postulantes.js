@@ -10,7 +10,7 @@
 // ============================================================================
 
 const { getOverlay, personKey, getAllPostulaciones, getAccountsForPerson } = require('../lib/overlay');
-const { DAYS_MAP, ROLE_LABEL, CLASS_DURATION_MS, dateDMY, timeHM, minutesOfDay, classifyOverlap, computeColorReason } = require('../lib/elegibilidad');
+const { DAYS_MAP, ROLE_LABEL, CLASS_DURATION_MS, dateDMY, timeHM, minutesOfDay, classifyOverlap, computeColorReason, cursoMatches } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 
 function getEnv() {
@@ -185,7 +185,8 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      return { p, key, estadoOverlay, ratingManualPromedio, ratingManualCount: ratingVals.length, accounts, vigentes, allCommissionNumbers, datosIncompletos };
+      const cursosHabilitados = (overlay && overlay.cursosHabilitados) || [];
+      return { p, key, estadoOverlay, cursosHabilitados, ratingManualPromedio, ratingManualCount: ratingVals.length, accounts, vigentes, allCommissionNumbers, datosIncompletos };
     }));
 
     // Un solo pedido a PostHog para el rating real de todos los postulantes
@@ -207,9 +208,18 @@ module.exports = async function handler(req, res) {
       const ratingCount = usaPostHog ? ph.ratingCount : d.ratingManualCount;
       const ratingSource = usaPostHog ? 'posthog' : (d.ratingManualPromedio != null ? 'manual' : null);
 
+      // Igual que en el perfil: si no esta habilitada (en ningun rol) para
+      // el curso al que se postulo, se marca gris antes que cualquier otra
+      // regla, y el rol mostrado (si la postulacion no trajo uno propio,
+      // como las que llegan del formulario publico) se completa con el que
+      // ya tenga cargado para ese curso.
+      const cursoMatch = d.p.curso ? d.cursosHabilitados.find(c => cursoMatches(c.curso, d.p.curso)) : null;
+      const habilitado = d.p.curso ? !!cursoMatch : true;
+      const rolMostrado = d.p.rol || (cursoMatch ? cursoMatch.rol : null);
+
       const overlapCheck = classifyOverlap(target, d.vigentes);
-      const { color, reason: baseReason } = computeColorReason(d.estadoOverlay, overlapCheck, ratingPromedio);
-      const reason = d.datosIncompletos && color !== 'rojo' ? (baseReason + ' (no se pudo verificar su agenda completa)') : baseReason;
+      const { color, reason: baseReason } = computeColorReason(d.estadoOverlay, overlapCheck, ratingPromedio, habilitado);
+      const reason = d.datosIncompletos && color !== 'rojo' && color !== 'gris' ? (baseReason + ' (no se pudo verificar su agenda completa)') : baseReason;
 
       const enCurso = d.vigentes.filter(a => a.estadoComision === 'en_curso');
       const aFuturo = d.vigentes.filter(a => a.estadoComision === 'asignada');
@@ -218,13 +228,14 @@ module.exports = async function handler(req, res) {
         id: d.p.id,
         email: d.key,
         nombre: d.p.nombre || d.key.split('@')[0],
-        rol: d.p.rol,
+        rol: rolMostrado,
         fecha: d.p.fecha,
         estadoPostulacion: d.p.estado,
         ratingPromedio,
         ratingCount,
         ratingSource,
         estadoOverlay: d.estadoOverlay,
+        habilitado,
         color,
         reason,
         tooltip: {
