@@ -1,22 +1,18 @@
 // ============================================================================
-// FUNCION SERVERLESS: recibe los datos de la planilla de postulaciones y los
-// sincroniza contra el tablero.
+// FUNCION SERVERLESS: sincroniza las postulaciones de la planilla publica de
+// Google Sheets contra el tablero. El tablero mismo lee la planilla (por el
+// enlace publico, sin credenciales - ver lib/postulacionesSync.js), asi que
+// esta funcion no necesita recibir los datos por POST; alcanza con
+// invocarla (por GET o POST, sin body).
 //
-// Andrea eligio que sea Claude (via una tarea programada, una vez por hora)
-// quien lea la planilla de Google Sheets y se la mande a ESTE endpoint, en
-// vez de que el propio tablero se conecte solo a Google (eso hubiera pedido
-// configurar una cuenta de servicio de Google Cloud). Por eso este endpoint
-// espera un POST con el contenido de la planilla en el body:
-//   { "markdown": "<< el texto que Google Drive devuelve al leer el archivo >>" }
-// Protegido con el mismo CRON_SECRET que ya se usa para posthog-refresh, asi
-// que solo quien tenga esa clave puede cargar postulaciones.
-//
-// Si en algun momento se prefiere que el tablero se conecte solo a Google
-// (ver lib/googleSheet.js), alcanza con configurar las Environment Variables
-// GOOGLE_SHEET_ID / GOOGLE_SHEET_GID / GOOGLE_SERVICE_ACCOUNT_* - en ese caso
-// tambien se sincroniza sola cada vez que se abre la pestaña Comisiones (ver
-// api/dashboard-data.js), y este endpoint se puede seguir usando igual como
-// respaldo manual.
+// Se llama de tres formas, todas validas:
+//   1. Automatico: Vercel la invoca sola a las 9 y a las 15 (ver los cron en
+//      vercel.json), mandando el header Authorization con el CRON_SECRET.
+//   2. Automatico "a demanda": cada vez que alguien abre la pestaña
+//      Comisiones, si paso mas de una hora desde la ultima sincronizacion
+//      real (ver ensureFreshSync en api/dashboard-data.js).
+//   3. Manual, para probar: entrando desde el navegador a
+//      /api/postulaciones-sync?key=coderhouse-postulaciones-2026
 // ============================================================================
 
 const { syncPostulacionesFromSheet } = require('../lib/postulacionesSync');
@@ -24,9 +20,12 @@ const { syncPostulacionesFromSheet } = require('../lib/postulacionesSync');
 module.exports = async function handler(req, res) {
   try {
     const secret = process.env.CRON_SECRET;
-    if (secret) {
-      const auth = req.headers && req.headers.authorization;
-      if (auth !== `Bearer ${secret}`) { res.status(401).json({ error: 'No autorizado' }); return; }
+    const auth = req.headers && req.headers.authorization;
+    const autorizadoPorCron = !secret || auth === `Bearer ${secret}`;
+    const autorizadoPorClave = (req.query && req.query.key) === 'coderhouse-postulaciones-2026';
+    if (!autorizadoPorCron && !autorizadoPorClave) {
+      res.status(401).json({ error: 'No autorizado' });
+      return;
     }
 
     let datosPlanilla;
