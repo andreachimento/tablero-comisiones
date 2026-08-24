@@ -29,10 +29,6 @@
     {
       "path": "/api/posthog-refresh",
       "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/postulaciones-sync",
-      "schedule": "0 7 * * *"
     }
   ]
 }
