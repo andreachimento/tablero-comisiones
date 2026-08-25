@@ -53,13 +53,18 @@ module.exports = async function handler(req, res) {
       }
       case 'addComentario': {
         const texto = String(payload.texto || '').trim();
+        const autor = String(payload.autor || '').trim();
         if (!texto) {
           res.status(400).json({ error: 'El comentario esta vacio' });
           return;
         }
+        if (!autor) {
+          res.status(400).json({ error: 'Falta indicar quien escribe el comentario' });
+          return;
+        }
         overlay.comentarios.unshift({
           texto,
-          autor: payload.autor || 'Andrea Chimento',
+          autor,
           fecha: new Date().toISOString(),
         });
         break;
