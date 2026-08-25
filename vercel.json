@@ -9,6 +9,9 @@
     "api/staff-profile.js": {
       "maxDuration": 30
     },
+    "api/staff-rating-comments.js": {
+      "maxDuration": 20
+    },
     "api/staff-update.js": {
       "maxDuration": 10
     },
