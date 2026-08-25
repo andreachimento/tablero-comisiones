@@ -31,6 +31,10 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--ink); font-size: 13px; -webkit-font-smoothing: antialiased; }
+  /* Los navegadores no heredan la tipografia del body en inputs/selects/botones
+     por defecto (usan la fuente del sistema) - por eso los filtros se veian
+     con una letra distinta al resto de la pagina. Se la fuerza a heredar. */
+  input, select, button, textarea { font-family: inherit; }
 
   .header { background: #ffffff; color: var(--ink); padding: 18px 26px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
   .header .titlewrap { display: flex; align-items: center; gap: 12px; }
@@ -205,6 +209,13 @@
   .hist-group-label { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-soft); margin: 14px 0 6px; }
   .hist-group-label:first-child { margin-top: 0; }
   .hist-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; background: var(--bg); }
+  .hist-item-link { cursor: pointer; transition: box-shadow .12s; }
+  .hist-item-link:hover { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .hist-item-link-hint { font-size: 9.5px; color: var(--ink-soft); opacity: .8; margin-top: 2px; }
+  .hist-item-link:hover .hist-item-link-hint { color: var(--accent); }
+  /* Postulaciones dentro del perfil: se ven maximo ~5 sin agrandar la
+     pagina, el resto se scrollea. */
+  .postu-scroll { max-height: 336px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
   .hist-item-asignada { background: var(--amber-bg); }
   .hist-item-curso { background: var(--green-bg); }
   .hist-item-final { background: var(--line-soft); }
@@ -269,6 +280,22 @@
   .elig-tooltip .tt-section { font-weight: 800; text-transform: uppercase; font-size: 9.5px; letter-spacing: .4px; opacity: .75; margin-top: 6px; }
   .elig-tooltip .tt-section:first-child { margin-top: 0; }
   .elig-tooltip .tt-empty { opacity: .6; font-style: italic; }
+
+  /* --- Modal de comentarios de la encuesta (rating del perfil) --- */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(23,24,28,0.45); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 24px; }
+  .modal-overlay.hidden { display: none; }
+  .modal-box { background: white; border-radius: 14px; width: min(560px, 100%); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.28); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .modal-header h3 { font-size: 14px; font-weight: 700; }
+  .modal-close { cursor: pointer; font-size: 20px; color: var(--ink-soft); line-height: 1; padding: 2px 8px; border-radius: 6px; }
+  .modal-close:hover { background: var(--line-soft); color: var(--ink); }
+  .modal-body { padding: 6px 20px 16px; overflow-y: auto; }
+  .rating-comment-item { border-bottom: 1px solid var(--line-soft); padding: 12px 0; }
+  .rating-comment-item:last-child { border-bottom: none; }
+  .rating-comment-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--ink-soft); font-weight: 600; margin-bottom: 5px; }
+  .rating-comment-meta .rc-clase { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rating-comment-text { font-size: 12.5px; color: var(--ink); line-height: 1.5; }
+  .rating-comment-text.empty { color: var(--ink-soft); font-style: italic; }
 
   /* --- Postulaciones en el perfil de la persona: mismo cruce de colores --- */
   .hist-item.elig-verde { border-left: 4px solid var(--green); }
@@ -368,6 +395,12 @@
     <select id="fHorarioDisponible" onchange="applyStaffFilters()">
       <option value="">Cualquier horario disponible</option>
     </select>
+    <span class="filter-label">Ordenar por</span>
+    <select id="fOrden" onchange="applyStaffFilters()">
+      <option value="nombre">Nombre (A-Z)</option>
+      <option value="rating_desc">Rating (mayor a menor)</option>
+      <option value="rating_asc">Rating (menor a mayor)</option>
+    </select>
     <button class="btn-add" style="margin-top:0;" onclick="copyStaffEmails()">&#128203; Copiar mails</button>
     <span class="result-count" id="staffCount"></span>
   </div>
@@ -390,6 +423,13 @@
 
 <div class="toast" id="toast"></div>
 <div class="elig-tooltip" id="eligTooltip"></div>
+
+<div class="modal-overlay hidden" id="ratingModalOverlay" onclick="if(event.target === this) closeRatingModal()">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Comentarios de la encuesta</h3><span class="modal-close" onclick="closeRatingModal()">&times;</span></div>
+    <div class="modal-body" id="ratingModalBody"></div>
+  </div>
+</div>
 
 <script>
 let DATA = [];
@@ -996,7 +1036,22 @@ function applyStaffFilters(){
     if(horarioDisponible && !((p.disponibilidad && p.disponibilidad.franjas) || []).includes(horarioDisponible)) return false;
     return true;
   });
-  rows.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+  const orden = document.getElementById('fOrden').value || 'nombre';
+  if(orden === 'rating_desc' || orden === 'rating_asc'){
+    // Los que no tienen rating todavia van siempre al final (con cualquiera
+    // de los dos ordenes), porque no tiene sentido mezclarlos con los que si
+    // tienen un numero real; entre ellos se mantiene el orden alfabetico.
+    rows.sort((a, b) => {
+      const ra = a.ratingPromedio, rb = b.ratingPromedio;
+      if(ra == null && rb == null) return a.nombre.localeCompare(b.nombre, 'es');
+      if(ra == null) return 1;
+      if(rb == null) return -1;
+      return orden === 'rating_desc' ? (rb - ra) : (ra - rb);
+    });
+  } else {
+    rows.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  }
 
   document.getElementById('staffCount').textContent = rows.length + ' persona' + (rows.length === 1 ? '' : 's');
 
@@ -1096,6 +1151,13 @@ function formatFechaCorta(iso){
   } catch(e) { return ''; }
 }
 
+// Abre en una pestaña nueva la comision correspondiente en el Back Office de
+// Coderhouse (se usa desde el historial y las postulaciones del perfil).
+function openBackOffice(cohortId){
+  if(!cohortId) return;
+  window.open('https://backoffice.coderhouse.com/cohorts/' + encodeURIComponent(cohortId), '_blank', 'noopener');
+}
+
 function renderStaffProfile(p){
   currentStaffProfile = p;
   const wrap = document.getElementById('staffProfileContent');
@@ -1111,8 +1173,10 @@ function renderStaffProfile(p){
     const esManual = p.ratingSource === 'manual';
     const unidad = esManual ? 'comision' : 'encuesta';
     const ratingFuente = esManual ? ' <span class="no-rating">(dato manual, todavia sin respuestas de encuesta)</span>' : '';
-    html += '<div class="overall-rating"><div class="stars-big">' + starsHtml(p.ratingPromedio) + '</div>'
-      + '<div class="rating-num">' + p.ratingPromedio + ' / 5 &middot; promedio de ' + p.ratingCount + ' ' + unidad + (p.ratingCount === 1 ? '' : (esManual ? 'es' : 's')) + (esManual ? ' calificada' : ' respondida') + (p.ratingCount === 1 ? '' : 's') + ratingFuente + '</div></div>';
+    const clickAttrs = esManual ? '' : ' style="cursor:pointer;" title="Ver los comentarios de la encuesta" onclick="openRatingComments()"';
+    const verComentarios = esManual ? '' : '<div class="hist-item-link-hint" style="margin-top:4px;">Ver comentarios &rarr;</div>';
+    html += '<div class="overall-rating"' + clickAttrs + '><div class="stars-big">' + starsHtml(p.ratingPromedio) + '</div>'
+      + '<div class="rating-num">' + p.ratingPromedio + ' / 5 &middot; promedio de ' + p.ratingCount + ' ' + unidad + (p.ratingCount === 1 ? '' : (esManual ? 'es' : 's')) + (esManual ? ' calificada' : ' respondida') + (p.ratingCount === 1 ? '' : 's') + ratingFuente + '</div>' + verComentarios + '</div>';
   }
   html += '</div>';
 
@@ -1161,18 +1225,21 @@ function renderStaffProfile(p){
   if(!postus.length){
     html += '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no se postulo a ninguna comision.</p>';
   } else {
-    html += '<p style="font-size:11px;color:var(--ink-soft);font-style:italic;margin-bottom:10px;">El color indica si se puede sumar a esa comision, con las mismas reglas que en la pesta&ntilde;a Comisiones (rating y superposicion de horarios).</p>';
-    html += postus.map(po => {
+    html += '<p style="font-size:11px;color:var(--ink-soft);font-style:italic;margin-bottom:10px;">El color indica si se puede sumar a esa comision, con las mismas reglas que en la pesta&ntilde;a Comisiones (rating y superposicion de horarios). Clic en una fila para verla en Back Office.</p>';
+    html += '<div class="postu-scroll">' + postus.map(po => {
       const estado = po.estado || 'pendiente';
       const eligClass = po.color ? ' elig-' + po.color : '';
       const eligPillLabel = po.color === 'verde' ? 'Puede sumarse' : (po.color === 'naranja' ? 'Con advertencia' : (po.color === 'rojo' ? 'No puede sumar' : (po.color === 'gris' ? 'No habilitado' : '')));
       const eligPill = po.color ? '<span class="elig-pill"><span class="elig-dot"></span>' + eligPillLabel + '</span>' : '';
       const eligReason = po.reason ? '<span class="elig-reason">&#9679; ' + escapeHtml(po.reason) + '</span>' : '';
-      return '<div class="hist-item' + eligClass + '"><div class="com-left"><span class="com-curso">' + escapeHtml(po.curso || '') + ' <span class="com-num">#' + escapeHtml(String(po.comisionNumber || '')) + '</span></span>'
+      const linkClass = po.cohortId ? ' hist-item-link' : '';
+      const linkAttr = po.cohortId ? ' onclick="openBackOffice(\'' + escapeHtml(String(po.cohortId)) + '\')" title="Ver esta comision en Back Office"' : '';
+      const linkHint = po.cohortId ? '<div class="hist-item-link-hint">Ver en Back Office &rarr;</div>' : '';
+      return '<div class="hist-item' + eligClass + linkClass + '"' + linkAttr + '><div class="com-left"><span class="com-curso">' + escapeHtml(po.curso || '') + ' <span class="com-num">#' + escapeHtml(String(po.comisionNumber || '')) + '</span></span>'
         + '<span class="com-fechas">Postulado: ' + formatFechaCorta(po.fecha) + ' &middot; Rol: ' + (po.rol ? (ROLE_LABELS[po.rol] || po.rol) : 'a definir') + '</span>'
-        + eligReason + '</div>'
+        + eligReason + linkHint + '</div>'
         + '<div class="hist-right"><span class="estado-tag estado-postulacion-' + estado + '">' + (POSTULACION_ESTADO_LABELS[estado] || estado) + '</span>' + eligPill + '</div></div>';
-    }).join('');
+    }).join('') + '</div>';
   }
   html += '</div>';
 
@@ -1205,8 +1272,11 @@ function renderStaffProfile(p){
     html += '<div class="hist-group-label">' + g.label + '</div>';
     items.forEach(h => {
       const tipoClass = h.tipoAsignacion === 'Suplente' ? 'tipo-suplente' : (h.tipoAsignacion === 'Reemplazo' ? 'tipo-reemplazo' : 'tipo-titular');
-      html += '<div class="hist-item ' + g.itemClass + '"><div class="com-left"><span class="com-curso">' + escapeHtml(h.curso) + ' <span class="com-num">#' + h.comisionNumber + '</span></span>'
-        + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Horario: ' + (h.horaInicio ? (h.horaInicio + ' a ' + h.horaFin) : '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span></div>'
+      const linkClass = h.cohortId ? ' hist-item-link' : '';
+      const linkAttr = h.cohortId ? ' onclick="openBackOffice(\'' + escapeHtml(String(h.cohortId)) + '\')" title="Ver esta comision en Back Office"' : '';
+      const linkHint = h.cohortId ? '<div class="hist-item-link-hint">Ver en Back Office &rarr;</div>' : '';
+      html += '<div class="hist-item ' + g.itemClass + linkClass + '"' + linkAttr + '><div class="com-left"><span class="com-curso">' + escapeHtml(h.curso) + ' <span class="com-num">#' + h.comisionNumber + '</span></span>'
+        + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Horario: ' + (h.horaInicio ? (h.horaInicio + ' a ' + h.horaFin) : '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span>' + linkHint + '</div>'
         + '<div class="hist-right"><span class="hist-status ' + g.statusClass + '">' + g.statusLabel + '</span>';
       if(g.key === 'finalizada'){
         html += '<span class="stars-small" data-cohort="' + h.cohortId + '" data-rating="' + (h.rating || 0) + '"></span>';
@@ -1232,7 +1302,7 @@ function renderStaffProfile(p){
         const s = document.createElement('span');
         s.textContent = '★';
         if(i <= current) s.classList.add('filled');
-        s.onclick = () => { setStaffRating(cohortId, i); render(i); };
+        s.onclick = (ev) => { ev.stopPropagation(); setStaffRating(cohortId, i); render(i); };
         el.appendChild(s);
       }
     }
@@ -1323,6 +1393,46 @@ function removeStaffCurso(cursoEnc, rol){
     if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
     else showToast('No se pudo quitar el curso: ' + ((resp && resp.error) || ''), 4000);
   });
+}
+
+function openRatingComments(){
+  const p = currentStaffProfile;
+  if(!p || p.ratingPromedio == null) return;
+  const overlay = document.getElementById('ratingModalOverlay');
+  const body = document.getElementById('ratingModalBody');
+  overlay.classList.remove('hidden');
+  body.innerHTML = '<p style="text-align:center;padding:24px 0;color:var(--ink-soft);"><span class="spinner"></span>Cargando comentarios...</p>';
+  fetch('/api/staff-rating-comments?email=' + encodeURIComponent(p.email))
+    .then(r => r.json())
+    .then(payload => {
+      if(!payload || payload.error){
+        body.innerHTML = '<p style="color:var(--red);padding:10px 0;">No se pudieron cargar los comentarios: ' + escapeHtml((payload && payload.error) || 'error desconocido') + '</p>';
+        return;
+      }
+      const respuestas = payload.respuestas || [];
+      if(!respuestas.length){
+        body.innerHTML = '<p style="color:var(--ink-soft);font-style:italic;padding:10px 0;">Todavia no hay respuestas de la encuesta para esta persona.</p>';
+        return;
+      }
+      body.innerHTML = respuestas.map(r => {
+        const fecha = formatFechaCorta(r.fecha);
+        const scoreHtml = r.score != null ? starsHtml(r.score) : '<span class="no-rating">Sin puntaje</span>';
+        const tieneComentario = r.comment && r.comment.trim();
+        const comentario = tieneComentario ? escapeHtml(r.comment) : 'Sin comentario escrito.';
+        return '<div class="rating-comment-item">'
+          + '<div class="rating-comment-meta"><span class="rc-clase">' + escapeHtml(r.claseTitle || 'Clase') + (r.cohortId ? ' &middot; #' + escapeHtml(String(r.cohortId)) : '') + '</span><span>' + fecha + '</span></div>'
+          + '<div class="stars-small" style="cursor:default;margin-bottom:5px;">' + scoreHtml + '</div>'
+          + '<div class="rating-comment-text' + (tieneComentario ? '' : ' empty') + '">' + comentario + '</div>'
+          + '</div>';
+      }).join('');
+    })
+    .catch(err => {
+      body.innerHTML = '<p style="color:var(--red);padding:10px 0;">No se pudieron cargar los comentarios: ' + escapeHtml(err.message) + '</p>';
+    });
+}
+
+function closeRatingModal(){
+  document.getElementById('ratingModalOverlay').classList.add('hidden');
 }
 
 function setStaffRating(cohortId, rating){
