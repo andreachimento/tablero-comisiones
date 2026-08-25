@@ -1235,7 +1235,14 @@ function renderStaffProfile(p){
 
   html += '<div class="grid-2" style="margin:0 26px;"><div>';
 
-  html += '<div class="card"><h3>Comentarios</h3><div class="comment-box"><textarea id="newComentario" placeholder="Escribir un comentario sobre esta persona..."></textarea>'
+  html += '<div class="card"><h3>Comentarios</h3><div class="comment-box">'
+    + '<div class="autor-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+    + '<label for="selComentarioAutor" style="font-size:11.5px;font-weight:700;color:var(--ink-soft);white-space:nowrap;">Tu nombre:</label>'
+    + '<select id="selComentarioAutor" style="flex:1;max-width:240px;">'
+    + '<option value="">Seleccionar...</option>'
+    + COMENTARIO_AUTORES.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join('')
+    + '</select></div>'
+    + '<textarea id="newComentario" placeholder="Escribir un comentario sobre esta persona..."></textarea>'
     + '<button class="btn-add" onclick="addStaffComentario()">+ Agregar comentario</button></div><div style="margin-top:14px;">';
   html += (p.comentarios || []).map((c, i) => '<div class="comment-item" data-idx="' + i + '"><div class="comment-meta">' + escapeHtml(c.autor || '') + ' &middot; ' + formatFechaCorta(c.fecha) + (c.editado ? ' <span class="comment-edited">(editado)</span>' : '') + '</div>'
     + '<div class="comment-text" id="commentText' + i + '">' + escapeHtml(c.texto) + '</div>'
@@ -1371,10 +1378,13 @@ function setStaffEstado(val){
 }
 
 function addStaffComentario(){
+  const selAutor = document.getElementById('selComentarioAutor');
   const ta = document.getElementById('newComentario');
+  const autor = selAutor.value;
   const texto = ta.value.trim();
+  if(!autor){ showToast('Elegi tu nombre antes de agregar el comentario.', 3000); return; }
   if(!texto) return;
-  postStaffUpdate('addComentario', { texto: texto, autor: 'Andrea Chimento' }).then(resp => {
+  postStaffUpdate('addComentario', { texto: texto, autor: autor }).then(resp => {
     if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
     else showToast('No se pudo agregar el comentario: ' + ((resp && resp.error) || ''), 4000);
   });
@@ -1497,6 +1507,11 @@ function saveStaffDisponibilidad(){
 }
 
 const POSTULACION_ESTADO_LABELS = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
+
+// Nombres que aparecen en el desplegable "Tu nombre" al dejar un comentario
+// en un perfil de staff, para que quede guardado quien lo escribio de
+// verdad (antes quedaba siempre fijo como "Andrea Chimento").
+const COMENTARIO_AUTORES = ['Andrea Chimento', 'Agustina Acevedo', 'Antonella Nuñez', 'Camila Mojavik', 'Camila Bruno', 'Erika Diaz', 'Oriana Bravo'];
 
 // ============================================================================
 // DIPLOMATURAS (pestaña nueva) - una fila es una diplomatura completa (lo que
