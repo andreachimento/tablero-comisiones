@@ -97,6 +97,8 @@
   .estudiantes { text-align: center; font-weight: 700; border-radius: 999px; padding: 4px 11px; font-variant-numeric: tabular-nums; display: inline-block; min-width: 34px; }
   .modalidad-tag { background: var(--green-bg); color: var(--green); border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; }
   .pais-tag { color: var(--ink-soft); font-weight: 600; font-size: 11.5px; }
+  .bo-btn { border: 1px solid var(--line); background: white; border-radius: 6px; padding: 5px 10px; font-size: 10.5px; font-weight: 700; color: var(--ink-soft); cursor: pointer; white-space: nowrap; }
+  .bo-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
 
   .filter-dropdown { position: fixed; background: white; border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(20,20,43,0.18); border-radius: 10px; z-index: 100; min-width: 230px; max-height: 320px; display: flex; flex-direction: column; overflow: hidden; }
   .filter-dropdown .fd-search { padding: 10px; border-bottom: 1px solid var(--line-soft); }
@@ -361,7 +363,7 @@
 <div class="table-wrap">
   <table>
     <thead><tr id="headerRow"></tr></thead>
-    <tbody id="tbody"><tr class="loading-row"><td colspan="15"><span class="spinner"></span>Cargando comisiones desde el sistema de Coderhouse...</td></tr></tbody>
+    <tbody id="tbody"><tr class="loading-row"><td colspan="16"><span class="spinner"></span>Cargando comisiones desde el sistema de Coderhouse...</td></tr></tbody>
   </table>
   <div id="no-results" class="no-results" style="display:none">No hay comisiones con esos filtros.</div>
 </div>
@@ -452,6 +454,7 @@ const COLUMNS = [
   {key:'students', label:'Estudiantes', filter:false},
   {key:'modalidad', label:'Modalidad', filter:true},
   {key:'pais', label:'Pais', filter:true},
+  {key:'backoffice', label:'Back Office', filter:false},
 ];
 
 let filters = {};
@@ -576,7 +579,7 @@ function onLoadError(err, auto){
   b.textContent = '↻ Actualizar datos'; b.disabled = false;
   if(!auto) showToast('No se pudo actualizar: ' + (err && err.message ? err.message : err), 7000);
   if(!hasLoadedOnce){
-    document.getElementById('tbody').innerHTML = '<tr class="loading-row"><td colspan="15">No se pudieron cargar los datos. Apreta "Actualizar datos" para reintentar.</td></tr>';
+    document.getElementById('tbody').innerHTML = '<tr class="loading-row"><td colspan="16">No se pudieron cargar los datos. Apreta "Actualizar datos" para reintentar.</td></tr>';
   }
 }
 
@@ -820,9 +823,10 @@ function applyFilters(){
       + '<td><span class="estudiantes" style="background:' + bg + ';color:' + color + '">' + r.students + '</span></td>'
       + '<td><span class="modalidad-tag">' + r.modalidad + '</span></td>'
       + '<td class="pais-tag">' + r.pais + '</td>'
+      + '<td>' + (r.cohortId ? '<button class="bo-btn" onclick="openBackOffice(\'' + r.cohortId + '\')" title="Ver esta comision en Back Office">&#8599; Back Office</button>' : '<span class="tag-no">-</span>') + '</td>'
       + '</tr>';
     if(expanded){
-      row += '<tr class="expand-row"><td colspan="15">' + renderPostulantesPanel(r) + '</td></tr>';
+      row += '<tr class="expand-row"><td colspan="16">' + renderPostulantesPanel(r) + '</td></tr>';
     }
     return row;
   }).join('');
