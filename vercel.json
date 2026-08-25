@@ -18,6 +18,9 @@
     "api/comision-postulantes.js": {
       "maxDuration": 30
     },
+    "api/certificaciones.js": {
+      "maxDuration": 60
+    },
     "api/posthog-refresh.js": {
       "maxDuration": 30
     },
