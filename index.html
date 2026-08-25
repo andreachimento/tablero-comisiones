@@ -150,6 +150,7 @@
   .estado-aprobado { background: var(--green-bg); color: var(--green); }
   .estado-desaprobado { background: var(--red-bg); color: var(--red); }
   .estado-futuro { background: var(--amber-bg); color: var(--amber); }
+  .estado-pendiente { background: var(--amber-bg); color: var(--amber); }
   .estado-postulacion-pendiente { background: var(--amber-bg); color: var(--amber); }
   .estado-postulacion-aprobada { background: var(--green-bg); color: var(--green); }
   .estado-postulacion-rechazada { background: var(--red-bg); color: var(--red); }
@@ -320,6 +321,17 @@
   .elig-naranja .elig-dot { background: var(--amber); }
   .elig-rojo .elig-dot { background: var(--red); }
   .elig-gris .elig-dot { background: var(--gris); }
+
+  /* --- Certificaciones: tarjeta "Certificaciones pendientes" del perfil --- */
+  .cert-pend-item-perfil { border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid; display: flex; gap: 12px; align-items: flex-start; }
+  .cert-pend-item-perfil.semaforo-verde { background: var(--green-bg); border-color: #bfe9d9; }
+  .cert-pend-item-perfil.semaforo-rojo { background: var(--red-bg); border-color: #f5c6c1; }
+  .cert-check-row-ok-bad { display: flex; align-items: center; gap: 5px; }
+  .cert-check-row-ok-bad.ok { color: var(--green); }
+  .cert-check-row-ok-bad.bad { color: var(--red); }
+
+  /* --- Certificaciones: pantalla de gestion de preguntas --- */
+  .preg-opcion-input:focus { border-color: var(--accent); background: white; }
 </style>
 </head>
 <body>
@@ -341,6 +353,7 @@
   <div class="tab active" id="tab-comisiones" onclick="showTab('comisiones')">Comisiones</div>
   <div class="tab" id="tab-staff" onclick="showTab('staff')">Staff</div>
   <div class="tab" id="tab-diplomas" onclick="showTab('diplomas')">Diplomaturas</div>
+  <div class="tab" id="tab-certificaciones" onclick="showTab('certificaciones')">Certificaciones</div>
 </div>
 
 <div class="page" id="pageComisiones">
@@ -458,6 +471,84 @@
 </div>
 
 </div><!-- /pageDiplomas -->
+
+<!-- ======================= CERTIFICACIONES ======================= -->
+<div class="page hidden" id="pageCertificaciones">
+
+<div class="stats" id="statsCert"></div>
+
+<div class="controls">
+  <span class="filter-label">Curso</span>
+  <select id="fCertCurso" onchange="applyCertFilters()"><option value="">Todos los cursos</option></select>
+  <input type="text" id="fCertPersona" placeholder="Buscar por nombre o mail..." oninput="applyCertFilters()">
+  <span class="filter-label">Nota minima</span>
+  <input type="number" id="fCertNota" placeholder="8" style="width:70px;" oninput="applyCertFilters()">
+  <span class="filter-label">Rol</span>
+  <select id="fCertRol" onchange="applyCertFilters()">
+    <option value="">Todos</option>
+    <option value="profesor">Profesor</option>
+    <option value="tutor">Tutor Adjunto</option>
+  </select>
+  <span class="filter-label">Estado</span>
+  <select id="fCertEstado" onchange="applyCertFilters()">
+    <option value="">Todos</option>
+    <option value="pendiente">Pendiente</option>
+    <option value="aprobado">Aprobado</option>
+    <option value="desaprobado">Desaprobado</option>
+  </select>
+  <button class="clear-btn" onclick="clearCertFilters()">&#10005; Limpiar filtros</button>
+  <button class="btn-add" style="margin-top:0;" onclick="abrirGestionPreguntas()">&#9998; Gestionar preguntas</button>
+  <span class="result-count" id="certResultCount"></span>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Persona</th><th>Curso</th><th>Rol</th><th>Nota</th><th>Semaforo</th><th>Fecha</th><th>Estado</th><th>Acciones</th>
+    </tr></thead>
+    <tbody id="certTbody"><tr class="loading-row"><td colspan="8"><span class="spinner"></span>Cargando certificaciones...</td></tr></tbody>
+  </table>
+  <div id="cert-no-results" class="no-results" style="display:none">No hay certificaciones con esos filtros.</div>
+</div>
+
+</div><!-- /pageCertificaciones -->
+
+<!-- ======================= CERTIFICACIONES: gestionar preguntas (modal) ======================= -->
+<div class="modal-overlay hidden" id="preguntasModalOverlay">
+  <div class="modal-box" style="width:min(760px,100%);">
+    <div class="modal-header">
+      <h3>Gestionar preguntas de evaluacion</h3>
+      <span class="modal-close" onclick="cerrarGestionPreguntas()">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="controls" style="margin:0 0 14px;">
+        <span class="filter-label">Curso</span>
+        <select id="pregCurso" onchange="renderPreguntasAdmin()"><option value="">Seleccionar curso...</option></select>
+        <span class="filter-label">Rol</span>
+        <select id="pregRol" onchange="renderPreguntasAdmin()">
+          <option value="profesor">Profesor</option>
+          <option value="tutor">Tutor Adjunto</option>
+        </select>
+      </div>
+      <div id="preguntasListWrap"></div>
+      <div class="card" style="margin-top:14px;">
+        <h3 id="pregFormTitle">Agregar pregunta</h3>
+        <input type="hidden" id="pregEditId">
+        <input type="text" id="pregTexto" class="pub-input-like" placeholder="Texto de la pregunta" style="width:100%;margin-bottom:8px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:12.5px;">
+        <div id="pregOpcionesWrap"></div>
+        <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;align-items:center;">
+          <button class="quickbtn" onclick="agregarOpcionForm()">+ Agregar opcion</button>
+          <span class="filter-label">Puntaje</span>
+          <input type="number" id="pregPuntaje" value="1" min="1" style="width:60px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 8px;font-size:12.5px;">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-add" style="margin-top:0;" onclick="guardarPregunta()">Guardar pregunta</button>
+          <button class="quickbtn" onclick="limpiarFormPregunta()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <datalist id="cursoDatalist"></datalist>
 
@@ -1002,16 +1093,19 @@ function showTab(tab){
   document.getElementById('tab-comisiones').classList.toggle('active', tab === 'comisiones');
   document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
   document.getElementById('tab-diplomas').classList.toggle('active', tab === 'diplomas');
+  document.getElementById('tab-certificaciones').classList.toggle('active', tab === 'certificaciones');
   document.getElementById('pageComisiones').classList.toggle('hidden', tab !== 'comisiones');
   const showingProfile = tab === 'staff' && currentStaffEmail;
   document.getElementById('pageStaff').classList.toggle('hidden', !(tab === 'staff' && !currentStaffEmail));
   document.getElementById('pageStaffProfile').classList.toggle('hidden', !showingProfile);
   document.getElementById('pageDiplomas').classList.toggle('hidden', tab !== 'diplomas');
+  document.getElementById('pageCertificaciones').classList.toggle('hidden', tab !== 'certificaciones');
   if(tab === 'staff'){
     if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
     else loadStaffList();
   }
   if(tab === 'diplomas' && !diplomasLoadedOnce) loadDiplomas();
+  if(tab === 'certificaciones' && !certLoadedOnce) loadCertificaciones();
 }
 
 function loadStaffList(){
@@ -1168,10 +1262,69 @@ function loadStaffProfile(email){
         return;
       }
       renderStaffProfile(payload);
+      loadCertificacionesPerfil(payload.email);
     })
     .catch(err => {
       wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red);">No se pudo cargar el perfil: ' + err.message + '</div>';
     });
+}
+
+// Trae (o reutiliza si ya se cargaron en esta visita) las certificaciones y
+// filtra las que son de esta persona, para la tarjeta "Certificaciones
+// pendientes" del perfil. Se hace aparte del fetch principal del perfil
+// porque el calculo del semaforo (rating + ultima comision) es mas costoso,
+// y asi no hace mas lenta la carga del resto del perfil.
+function loadCertificacionesPerfil(email){
+  const body = document.getElementById('certPendientesBody');
+  if(!body) return;
+  fetch('/api/certificaciones')
+    .then(r => r.json())
+    .then(payload => {
+      if(!body || document.getElementById('certPendientesBody') !== body) return; // se cambio de perfil mientras cargaba
+      if(payload.error){
+        body.innerHTML = '<p style="font-size:12px;color:var(--red);">No se pudieron cargar las certificaciones: ' + escapeHtml(payload.error) + '</p>';
+        return;
+      }
+      CERT_RESP = payload;
+      const key = personKeyJs(email);
+      const propias = (payload.certificaciones || []).filter(c => personKeyJs(c.email) === key && c.estado === 'pendiente');
+      if(!propias.length){
+        body.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">No tiene certificaciones pendientes.</p>';
+        return;
+      }
+      body.innerHTML = propias.map(c => {
+        const chk = c.checklist || {};
+        const rolLabel = c.rol === 'profesor' ? 'Profesor' : 'Tutor Adjunto';
+        const filas = [];
+        if(chk.ratingPromedio != null) filas.push('<div class="cert-check-row-ok-bad ' + (chk.ratingOk ? 'ok' : 'bad') + '">' + (chk.ratingOk ? '&#10003;' : '&#10007;') + ' Rating ' + chk.ratingPromedio.toFixed(1) + ' (minimo ' + (payload.ratingMinimo || 4.7) + ')</div>');
+        else filas.push('<div class="cert-check-row-ok-bad bad">&#10007; Todavia sin rating</div>');
+        if(chk.ultimaComisionFecha) filas.push('<div class="cert-check-row-ok-bad ' + (chk.recienteOk ? 'ok' : 'bad') + '">' + (chk.recienteOk ? '&#10003;' : '&#10007;') + ' Ultima comision: ' + formatFechaCorta(chk.ultimaComisionFecha) + '</div>');
+        else filas.push('<div class="cert-check-row-ok-bad bad">&#10007; Sin comisiones registradas</div>');
+        return '<div class="cert-pend-item-perfil ' + (chk.semaforo === 'verde' ? 'semaforo-verde' : 'semaforo-rojo') + '">'
+          + '<div style="flex:1;"><div style="font-weight:700;font-size:12.5px;">' + escapeHtml(c.curso) + ' &middot; ' + rolLabel + '</div>'
+          + '<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">Evaluacion rendida el ' + formatFechaCorta(c.fecha) + '</div>'
+          + '<div style="margin-top:6px;font-size:11px;">' + filas.join('') + '</div></div>'
+          + '<div style="font-weight:800;font-size:13px;white-space:nowrap;">' + Number(c.nota).toFixed(1) + '/10</div>'
+          + '</div>';
+      }).join('') + '<div class="field-hint" style="margin-top:6px;">Para aprobar o desaprobar, se hace desde la solapa Certificaciones.</div>';
+    })
+    .catch(err => {
+      if(body) body.innerHTML = '<p style="font-size:12px;color:var(--red);">No se pudieron cargar las certificaciones: ' + escapeHtml(err.message) + '</p>';
+    });
+}
+
+// Version en JS del personKey() del servidor (lib/overlay.js): saca el
+// "+tag" del mail (ej. nombre+profesor@mail.com -> nombre@mail.com) para
+// poder comparar mails de una misma persona.
+function personKeyJs(email){
+  const norm = String(email || '').toLowerCase().trim();
+  const at = norm.indexOf('@');
+  if(at === -1) return norm;
+  const domain = norm.slice(at);
+  let local = norm.slice(0, at);
+  const plus = local.indexOf('+');
+  if(plus !== -1) local = local.slice(0, plus);
+  return local + domain;
 }
 
 function escapeHtml(s){
@@ -1250,6 +1403,8 @@ function renderStaffProfile(p){
     + '</div>').join('')
     || '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no hay comentarios.</p>';
   html += '</div></div>';
+
+  html += '<div class="card" id="certPendientesCard"><h3>Certificaciones pendientes</h3><div id="certPendientesBody"><p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Cargando...</p></div></div>';
 
   html += '<div class="card"><h3>Cursos habilitados a dictar</h3>'
     + '<div class="add-course-row">'
@@ -1739,6 +1894,297 @@ document.getElementById('dipTbody').addEventListener('click', function(e){
     if(c) copyComisionInfo(c);
   }
 });
+
+// ============================================================================
+// CERTIFICACIONES (pestaña nueva) - postulacion de alguien que ya da clases
+// para certificarse en OTRO curso o rol. Cada fila es una certificacion
+// individual (nombre, curso, rol, nota de la evaluacion, estado). Para las
+// "pendiente" se calcula un semaforo (rating + ultima comision) que ayuda a
+// decidir, pero la decision de aprobar/desaprobar siempre la toma una
+// persona desde esta pestaña.
+// ============================================================================
+
+let CERT_RESP = { certificaciones: [], preguntas: {}, ratingMinimo: 4.7, diasRecencia: 365 };
+let certLoadedOnce = false;
+let certVisibleRows = [];
+
+function loadCertificaciones(){
+  const tbody = document.getElementById('certTbody');
+  fetch('/api/certificaciones')
+    .then(r => r.json())
+    .then(payload => {
+      if(payload.error){
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--red);">No se pudieron cargar las certificaciones: ' + escapeHtml(payload.error) + '</td></tr>';
+        return;
+      }
+      CERT_RESP = payload;
+      certLoadedOnce = true;
+      renderCertStats();
+      buildCertCourseFilter();
+      applyCertFilters();
+    })
+    .catch(err => {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--red);">No se pudieron cargar las certificaciones: ' + escapeHtml(err.message) + '</td></tr>';
+    });
+}
+
+function renderCertStats(){
+  const certs = CERT_RESP.certificaciones || [];
+  const pendientes = certs.filter(c => c.estado === 'pendiente').length;
+  const aprobadas = certs.filter(c => c.estado === 'aprobado').length;
+  const desaprobadas = certs.filter(c => c.estado === 'desaprobado').length;
+  document.getElementById('statsCert').innerHTML =
+      '<div class="stat-card"><div class="num">' + certs.length + '</div><div class="lbl">Certificaciones totales</div></div>'
+    + '<div class="stat-card orange"><div class="num">' + pendientes + '</div><div class="lbl">Pendientes</div></div>'
+    + '<div class="stat-card green"><div class="num">' + aprobadas + '</div><div class="lbl">Aprobadas</div></div>'
+    + '<div class="stat-card red"><div class="num">' + desaprobadas + '</div><div class="lbl">Desaprobadas</div></div>';
+}
+
+function certCourseNames(){
+  const cursos = new Set(allCourseNames || []);
+  (CERT_RESP.certificaciones || []).forEach(c => cursos.add(c.curso));
+  return Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+function buildCertCourseFilter(){
+  const sel = document.getElementById('fCertCurso');
+  const current = sel.value;
+  const list = certCourseNames();
+  sel.innerHTML = '<option value="">Todos los cursos</option>' + list.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('');
+  sel.value = current;
+}
+
+function clearCertFilters(){
+  document.getElementById('fCertCurso').value = '';
+  document.getElementById('fCertPersona').value = '';
+  document.getElementById('fCertNota').value = '';
+  document.getElementById('fCertRol').value = '';
+  document.getElementById('fCertEstado').value = '';
+  applyCertFilters();
+}
+
+function applyCertFilters(){
+  const curso = document.getElementById('fCertCurso').value;
+  const persona = document.getElementById('fCertPersona').value.trim().toLowerCase();
+  const notaMinRaw = document.getElementById('fCertNota').value;
+  const notaMin = notaMinRaw === '' ? null : parseFloat(notaMinRaw);
+  const rol = document.getElementById('fCertRol').value;
+  const estado = document.getElementById('fCertEstado').value;
+
+  certVisibleRows = (CERT_RESP.certificaciones || []).filter(c => {
+    if(curso && c.curso !== curso) return false;
+    if(rol && c.rol !== rol) return false;
+    if(estado && c.estado !== estado) return false;
+    if(notaMin != null && !isNaN(notaMin) && Number(c.nota) < notaMin) return false;
+    if(persona){
+      const hay = (c.nombre || '').toLowerCase().includes(persona) || (c.email || '').toLowerCase().includes(persona);
+      if(!hay) return false;
+    }
+    return true;
+  });
+  certVisibleRows.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+  document.getElementById('certResultCount').textContent = certVisibleRows.length + (certVisibleRows.length === 1 ? ' certificacion' : ' certificaciones');
+  renderCertRows();
+}
+
+function renderCertRows(){
+  const tbody = document.getElementById('certTbody');
+  const noRes = document.getElementById('cert-no-results');
+  if(!certVisibleRows.length){
+    tbody.innerHTML = '';
+    noRes.style.display = 'block';
+    return;
+  }
+  noRes.style.display = 'none';
+  tbody.innerHTML = certVisibleRows.map(c => {
+    const rolLabel = c.rol === 'profesor' ? 'Profesor' : 'Tutor Adjunto';
+    const fecha = c.fecha ? formatFechaCorta(c.fecha) : '-';
+    let semaforoHtml = '<span style="color:var(--ink-soft);font-size:11px;">-</span>';
+    if(c.estado === 'pendiente' && c.checklist){
+      const verde = c.checklist.semaforo === 'verde';
+      semaforoHtml = '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:' + (verde ? 'var(--green)' : 'var(--red)') + ';"></span>' + (verde ? 'Cumple' : 'No cumple');
+    }
+    let cooldownNote = '';
+    if(c.estado === 'desaprobado' && c.cooldownHasta && new Date(c.cooldownHasta) > new Date()){
+      cooldownNote = '<div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">Bloqueado hasta ' + formatFechaCorta(c.cooldownHasta) + '</div>';
+    }
+    let acciones = '';
+    if(c.estado === 'pendiente'){
+      acciones = '<button class="bo-btn" style="color:var(--green);" onclick="aprobarCert(\'' + c.id + '\')">Aprobar</button> '
+        + '<button class="bo-btn" style="color:var(--red);" onclick="desaprobarCert(\'' + c.id + '\')">Desaprobar</button>';
+    } else if(c.estado === 'desaprobado'){
+      acciones = '<button class="bo-btn" onclick="habilitarDeNuevoCert(\'' + c.id + '\')">Habilitar de nuevo</button>';
+    }
+    return '<tr>'
+      + '<td><span class="staff-name">' + escapeHtml(c.nombre || '') + '</span><div style="font-size:10.5px;color:var(--ink-soft);">' + escapeHtml(c.email || '') + '</div></td>'
+      + '<td>' + escapeHtml(c.curso || '') + '</td>'
+      + '<td>' + rolLabel + '</td>'
+      + '<td style="font-weight:700;">' + (c.nota != null ? Number(c.nota).toFixed(1) : '-') + '/10</td>'
+      + '<td>' + semaforoHtml + '</td>'
+      + '<td>' + fecha + '</td>'
+      + '<td><span class="estado-tag estado-' + c.estado + '">' + c.estado.charAt(0).toUpperCase() + c.estado.slice(1) + '</span>' + cooldownNote + '</td>'
+      + '<td>' + acciones + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function postCertAction(action, payload){
+  return fetch('/api/certificaciones', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, payload }),
+  }).then(r => r.json());
+}
+
+function aprobarCert(id){
+  postCertAction('aprobar', { id }).then(resp => {
+    if(resp && resp.ok){ showToast('Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.'); loadCertificaciones(); }
+    else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+function desaprobarCert(id){
+  postCertAction('desaprobar', { id }).then(resp => {
+    if(resp && resp.ok){ showToast('Certificacion desaprobada. Se disparo el mail generico de rechazo.'); loadCertificaciones(); }
+    else showToast('No se pudo desaprobar: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+function habilitarDeNuevoCert(id){
+  postCertAction('habilitarDeNuevo', { id }).then(resp => {
+    if(resp && resp.ok){ showToast('Se habilito un nuevo intento para esta persona, sin esperar los 3 meses.'); loadCertificaciones(); }
+    else showToast('No se pudo habilitar: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Gestionar preguntas (modal)
+// ---------------------------------------------------------------------------
+
+function preguntasKeyFor(curso, rol){
+  return String(curso || '').trim().toLowerCase() + '|' + String(rol || '').trim().toLowerCase();
+}
+
+function abrirGestionPreguntas(){
+  document.getElementById('preguntasModalOverlay').classList.remove('hidden');
+  const selCurso = document.getElementById('pregCurso');
+  const current = selCurso.value;
+  const list = certCourseNames();
+  selCurso.innerHTML = '<option value="">Seleccionar curso...</option>' + list.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('');
+  if(current) selCurso.value = current;
+  limpiarFormPregunta();
+  renderPreguntasAdmin();
+}
+function cerrarGestionPreguntas(){
+  document.getElementById('preguntasModalOverlay').classList.add('hidden');
+}
+
+function renderPreguntasAdmin(){
+  const curso = document.getElementById('pregCurso').value;
+  const rol = document.getElementById('pregRol').value;
+  const wrap = document.getElementById('preguntasListWrap');
+  if(!curso){
+    wrap.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Elegi un curso para ver sus preguntas.</p>';
+    return;
+  }
+  const lista = (CERT_RESP.preguntas || {})[preguntasKeyFor(curso, rol)] || [];
+  if(!lista.length){
+    wrap.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no hay preguntas cargadas para ' + escapeHtml(curso) + ' (' + (rol === 'profesor' ? 'Profesor' : 'Tutor Adjunto') + ').</p>';
+    return;
+  }
+  wrap.innerHTML = lista.map((p, i) =>
+    '<div class="comment-item"><div style="display:flex;justify-content:space-between;gap:10px;">'
+    + '<div><b>' + (i + 1) + '.</b> ' + escapeHtml(p.texto) + '<div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">'
+    + p.opciones.map((o, oi) => (oi === p.correcta ? '<b style="color:var(--green);">&#10003; ' + escapeHtml(o) + '</b>' : escapeHtml(o))).join(' &middot; ')
+    + '</div><div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">Puntaje: ' + p.puntaje + '</div></div>'
+    + '<div class="comment-actions" style="flex-direction:column;align-items:flex-end;gap:6px;">'
+    + '<span class="comment-action" onclick="editarPreguntaForm(\'' + p.id + '\')">Editar</span>'
+    + '<span class="comment-action" style="color:var(--red);" onclick="borrarPregunta(\'' + p.id + '\')">Eliminar</span>'
+    + '</div></div></div>'
+  ).join('');
+}
+
+function agregarOpcionForm(valor){
+  const wrap = document.getElementById('pregOpcionesWrap');
+  const idx = wrap.children.length;
+  const div = document.createElement('div');
+  div.style.display = 'flex';
+  div.style.gap = '8px';
+  div.style.marginBottom = '6px';
+  div.style.alignItems = 'center';
+  div.innerHTML = '<input type="radio" name="pregCorrecta" value="' + idx + '" title="Marcar como correcta">'
+    + '<input type="text" class="preg-opcion-input" placeholder="Opcion ' + (idx + 1) + '" value="' + (valor ? escapeHtml(valor).replace(/"/g, '&quot;') : '') + '" style="flex:1;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 10px;font-size:12.5px;">'
+    + '<span class="remove-x" onclick="this.parentElement.remove()">&#10005;</span>';
+  wrap.appendChild(div);
+}
+
+function limpiarFormPregunta(){
+  document.getElementById('pregFormTitle').textContent = 'Agregar pregunta';
+  document.getElementById('pregEditId').value = '';
+  document.getElementById('pregTexto').value = '';
+  document.getElementById('pregPuntaje').value = '1';
+  document.getElementById('pregOpcionesWrap').innerHTML = '';
+  agregarOpcionForm(); agregarOpcionForm(); agregarOpcionForm(); agregarOpcionForm();
+}
+
+function editarPreguntaForm(id){
+  const curso = document.getElementById('pregCurso').value;
+  const rol = document.getElementById('pregRol').value;
+  const lista = (CERT_RESP.preguntas || {})[preguntasKeyFor(curso, rol)] || [];
+  const p = lista.find(x => x.id === id);
+  if(!p) return;
+  document.getElementById('pregFormTitle').textContent = 'Editar pregunta';
+  document.getElementById('pregEditId').value = p.id;
+  document.getElementById('pregTexto').value = p.texto;
+  document.getElementById('pregPuntaje').value = p.puntaje;
+  document.getElementById('pregOpcionesWrap').innerHTML = '';
+  p.opciones.forEach(o => agregarOpcionForm(o));
+  const radios = document.querySelectorAll('input[name="pregCorrecta"]');
+  if(radios[p.correcta]) radios[p.correcta].checked = true;
+}
+
+function guardarPregunta(){
+  const curso = document.getElementById('pregCurso').value;
+  const rol = document.getElementById('pregRol').value;
+  if(!curso){ showToast('Elegi el curso antes de guardar la pregunta.', 3000); return; }
+  const texto = document.getElementById('pregTexto').value.trim();
+  const puntaje = parseFloat(document.getElementById('pregPuntaje').value) || 1;
+  const opcionInputs = Array.from(document.querySelectorAll('.preg-opcion-input'));
+  const opciones = opcionInputs.map(inp => inp.value.trim());
+  const radioChecked = document.querySelector('input[name="pregCorrecta"]:checked');
+  if(!texto || opciones.length < 2 || opciones.some(o => !o)){ showToast('Completa el texto y al menos 2 opciones.', 3000); return; }
+  if(!radioChecked){ showToast('Marca cual opcion es la correcta.', 3000); return; }
+  const correcta = parseInt(radioChecked.value, 10);
+  const editId = document.getElementById('pregEditId').value;
+  const action = editId ? 'editPregunta' : 'addPregunta';
+  const payload = editId
+    ? { curso, rol, id: editId, texto, opciones, correcta, puntaje }
+    : { curso, rol, texto, opciones, correcta, puntaje };
+  postCertAction(action, payload).then(resp => {
+    if(resp && resp.ok){
+      CERT_RESP.preguntas = CERT_RESP.preguntas || {};
+      CERT_RESP.preguntas[preguntasKeyFor(curso, rol)] = resp.preguntas;
+      limpiarFormPregunta();
+      renderPreguntasAdmin();
+      showToast('Pregunta guardada.');
+    } else {
+      showToast('No se pudo guardar: ' + ((resp && resp.error) || ''), 4000);
+    }
+  });
+}
+
+function borrarPregunta(id){
+  const curso = document.getElementById('pregCurso').value;
+  const rol = document.getElementById('pregRol').value;
+  postCertAction('deletePregunta', { curso, rol, id }).then(resp => {
+    if(resp && resp.ok){
+      CERT_RESP.preguntas = CERT_RESP.preguntas || {};
+      CERT_RESP.preguntas[preguntasKeyFor(curso, rol)] = resp.preguntas;
+      renderPreguntasAdmin();
+      showToast('Pregunta eliminada.');
+    } else {
+      showToast('No se pudo eliminar: ' + ((resp && resp.error) || ''), 4000);
+    }
+  });
+}
 </script>
 </body>
 </html>
