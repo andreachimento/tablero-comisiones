@@ -340,6 +340,7 @@
 <div class="tabs">
   <div class="tab active" id="tab-comisiones" onclick="showTab('comisiones')">Comisiones</div>
   <div class="tab" id="tab-staff" onclick="showTab('staff')">Staff</div>
+  <div class="tab" id="tab-diplomas" onclick="showTab('diplomas')">Diplomaturas</div>
 </div>
 
 <div class="page" id="pageComisiones">
@@ -421,6 +422,42 @@
   <div class="back-link" onclick="closeStaffProfile()">&larr; Volver al listado de Staff</div>
   <div id="staffProfileContent"></div>
 </div><!-- /pageStaffProfile -->
+
+<!-- ======================= DIPLOMATURAS ======================= -->
+<div class="page hidden" id="pageDiplomas">
+
+<div class="stats" id="statsDip"></div>
+
+<div class="controls">
+  <input type="text" id="fDipBuscar" placeholder="Buscar por diplomatura..." oninput="applyDiplomasFilters()">
+  <span class="filter-label">Fecha Inicio</span>
+  <input type="date" id="dipDateFrom" onchange="applyDiplomasFilters()">
+  <span style="color:#c9cad3;font-size:11px;">&rarr;</span>
+  <input type="date" id="dipDateTo" onchange="applyDiplomasFilters()">
+  <button class="clear-btn" onclick="clearDiplomasFilters()">&#10005; Limpiar filtros</button>
+  <span class="result-count" id="dipResultCount"></span>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th><div class="th-inner"><span class="th-label">N. Comision</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Diplomatura</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Fecha Inicio</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Fecha Fin</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Modulos / Comisiones</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Postulantes</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Estudiantes</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Modalidad</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Pais</span></div></th>
+      <th><div class="th-inner"><span class="th-label">Back Office</span></div></th>
+    </tr></thead>
+    <tbody id="dipTbody"><tr class="loading-row"><td colspan="10"><span class="spinner"></span>Cargando diplomaturas desde el sistema de Coderhouse...</td></tr></tbody>
+  </table>
+  <div id="dip-no-results" class="no-results" style="display:none">No hay diplomaturas con esos filtros.</div>
+</div>
+
+</div><!-- /pageDiplomas -->
 
 <datalist id="cursoDatalist"></datalist>
 
@@ -964,14 +1001,17 @@ const FRANJAS_DISPONIBLES = ['7:30-10:00hs', '10:00-12:00hs', '11:00-13:00hs', '
 function showTab(tab){
   document.getElementById('tab-comisiones').classList.toggle('active', tab === 'comisiones');
   document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
+  document.getElementById('tab-diplomas').classList.toggle('active', tab === 'diplomas');
   document.getElementById('pageComisiones').classList.toggle('hidden', tab !== 'comisiones');
   const showingProfile = tab === 'staff' && currentStaffEmail;
   document.getElementById('pageStaff').classList.toggle('hidden', !(tab === 'staff' && !currentStaffEmail));
   document.getElementById('pageStaffProfile').classList.toggle('hidden', !showingProfile);
+  document.getElementById('pageDiplomas').classList.toggle('hidden', tab !== 'diplomas');
   if(tab === 'staff'){
     if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
     else loadStaffList();
   }
+  if(tab === 'diplomas' && !diplomasLoadedOnce) loadDiplomas();
 }
 
 function loadStaffList(){
@@ -1457,6 +1497,233 @@ function saveStaffDisponibilidad(){
 }
 
 const POSTULACION_ESTADO_LABELS = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
+
+// ============================================================================
+// DIPLOMATURAS (pestaña nueva) - una fila es una diplomatura completa (lo que
+// en el Back Office esta en "Diplomaturas -> Comisiones"), que por dentro
+// agrupa varios modulos, y cada modulo varias comisiones internas (una por
+// materia) con su propio profesor/dia/horario - por eso cada fila se puede
+// desplegar para ver el detalle, con el mismo mecanismo que "postulantes" en
+// la pestaña Comisiones.
+// ============================================================================
+let DIP_DATA = [];
+let diplomasLoadedOnce = false;
+let dipVisibleRows = [];
+let expandedDiplomaId = null;
+let expandedDipCohortId = null;
+
+// TODO (Andrea): pasame la URL de Back Office de UNA diplomatura completa
+// (no la de una comision interna, esas ya funcionan) y la pego aca. Formato
+// esperado: todo lo que va ANTES del id, para poder pegarle el id al final -
+// ej. si la URL es https://backoffice.coderhouse.com/diplomas/comisiones/XXXX
+// entonces esto tiene que quedar 'https://backoffice.coderhouse.com/diplomas/comisiones/'
+const DIPLOMA_BACKOFFICE_URL_PREFIX = null;
+
+function openDiplomaBackOffice(diplomaCommissionId){
+  if(!DIPLOMA_BACKOFFICE_URL_PREFIX){
+    showToast('Todavia no tengo la URL de Back Office para diplomaturas completas - pasamela y la conecto.', 4000);
+    return;
+  }
+  window.open(DIPLOMA_BACKOFFICE_URL_PREFIX + encodeURIComponent(diplomaCommissionId), '_blank', 'noopener');
+}
+
+function buildDiplomaText(d){
+  return 'Diplomatura: ' + d.course + '\n'
+    + 'Comisión: ' + d.commission + ' (' + d.name + ')\n'
+    + 'Inicio: ' + shortDate(d.startDate) + '\n'
+    + 'Fin: ' + shortDate(d.endDate) + '\n'
+    + 'Modalidad: ' + d.modalidad + '\n'
+    + 'País: ' + d.pais + '\n'
+    + 'Estudiantes: ' + d.students + '/' + d.maxStudents;
+}
+
+function copyDiplomaInfo(d){
+  const text = buildDiplomaText(d);
+  const done = ok => showToast(ok ? ('Copiado: diplomatura #' + d.commission) : 'No se pudo copiar automáticamente', 2500);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(() => done(true)).catch(() => done(fallbackCopy(text)));
+  } else {
+    done(fallbackCopy(text));
+  }
+}
+
+function loadDiplomas(){
+  const tbody = document.getElementById('dipTbody');
+  if(!diplomasLoadedOnce){
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="10"><span class="spinner"></span>Cargando diplomaturas desde el sistema de Coderhouse...</td></tr>';
+  }
+  fetch('/api/dashboard-data-diplomas')
+    .then(r => r.json())
+    .then(payload => {
+      if(!payload || payload.error){
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="10" style="color:var(--red);">No se pudieron cargar las diplomaturas: ' + escapeHtml((payload && payload.error) || 'error desconocido') + '</td></tr>';
+        return;
+      }
+      DIP_DATA = payload.rows || [];
+      diplomasLoadedOnce = true;
+      renderDiplomasStats();
+      applyDiplomasFilters();
+    })
+    .catch(err => {
+      tbody.innerHTML = '<tr class="loading-row"><td colspan="10" style="color:var(--red);">No se pudieron cargar las diplomaturas: ' + escapeHtml(err.message) + '</td></tr>';
+    });
+}
+
+function renderDiplomasStats(){
+  const nDiplomas = DIP_DATA.length;
+  const nProgramas = new Set(DIP_DATA.map(d => d.course)).size;
+  const nEstudiantes = DIP_DATA.reduce((sum, d) => sum + (d.students || 0), 0);
+  const nComisiones = DIP_DATA.reduce((sum, d) => sum + (d.cohortCount || 0), 0);
+  document.getElementById('statsDip').innerHTML =
+      '<div class="stat-card"><div class="num">' + nDiplomas + '</div><div class="lbl">Diplomaturas activas</div></div>'
+    + '<div class="stat-card accent"><div class="num">' + nProgramas + '</div><div class="lbl">Programas distintos</div></div>'
+    + '<div class="stat-card green"><div class="num">' + nEstudiantes + '</div><div class="lbl">Estudiantes anotados</div></div>'
+    + '<div class="stat-card"><div class="num">' + nComisiones + '</div><div class="lbl">Comisiones internas</div></div>';
+}
+
+function clearDiplomasFilters(){
+  document.getElementById('fDipBuscar').value = '';
+  document.getElementById('dipDateFrom').value = '';
+  document.getElementById('dipDateTo').value = '';
+  applyDiplomasFilters();
+}
+
+function applyDiplomasFilters(){
+  if(!diplomasLoadedOnce) return;
+  const q = document.getElementById('fDipBuscar').value.toLowerCase().trim();
+  const df = document.getElementById('dipDateFrom').value;
+  const dt = document.getElementById('dipDateTo').value;
+
+  let rows = DIP_DATA.filter(d => {
+    if(df && d.startDateISO < df) return false;
+    if(dt && d.startDateISO > dt) return false;
+    if(q){
+      const hay = (String(d.commission) + ' ' + d.course + ' ' + d.name).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('dipResultCount').textContent = 'Mostrando ' + rows.length + ' de ' + DIP_DATA.length;
+  dipVisibleRows = rows;
+
+  const tbody = document.getElementById('dipTbody');
+  if(!rows.length){
+    tbody.innerHTML = '';
+    document.getElementById('dip-no-results').style.display = 'block';
+    return;
+  }
+  document.getElementById('dip-no-results').style.display = 'none';
+  renderDiplomasRows();
+}
+
+function renderDiplomasRows(){
+  const tbody = document.getElementById('dipTbody');
+  tbody.innerHTML = dipVisibleRows.map((d, idx) => {
+    const pct = d.maxStudents > 0 ? d.students / d.maxStudents : 0;
+    const bg = pct >= 0.85 ? 'var(--pink-bg)' : pct >= 0.5 ? 'var(--amber-bg)' : 'var(--green-bg)';
+    const color = pct >= 0.85 ? 'var(--pink)' : pct >= 0.5 ? 'var(--amber)' : 'var(--green)';
+    const expanded = expandedDiplomaId === d.diplomaCommissionId;
+    const postuBadge = d.postulantesCount > 0
+      ? '<span class="postu-badge has-postulantes" style="cursor:default;">' + d.postulantesCount + ' postulante' + (d.postulantesCount > 1 ? 's' : '') + '</span>'
+      : '<span class="postu-badge none">Sin postulantes</span>';
+    let row = '<tr>'
+      + '<td class="commission" data-idx="' + idx + '" title="Clic para copiar los datos de esta diplomatura">#' + d.commission + '</td>'
+      + '<td class="course-name">' + escapeHtml(d.course) + '<div style="font-size:10.5px;color:var(--ink-soft);font-weight:500;margin-top:2px;">' + escapeHtml(d.name) + '</div></td>'
+      + '<td>' + d.startDate + '</td>'
+      + '<td>' + d.endDate + '</td>'
+      + '<td><span class="postu-badge has-postulantes' + (expanded ? ' expanded' : '') + '" onclick="toggleDiplomaExpand(\'' + d.diplomaCommissionId + '\')">' + d.moduleCount + ' modulos &middot; ' + d.cohortCount + ' comisiones <span class="chev">&#9660;</span></span></td>'
+      + '<td>' + postuBadge + '</td>'
+      + '<td><span class="estudiantes" style="background:' + bg + ';color:' + color + '">' + d.students + '</span> / ' + d.maxStudents + '</td>'
+      + '<td><span class="modalidad-tag">' + escapeHtml(d.modalidad) + '</span></td>'
+      + '<td class="pais-tag">' + escapeHtml(d.pais) + '</td>'
+      + '<td><button class="bo-btn" onclick="openDiplomaBackOffice(\'' + d.diplomaCommissionId + '\')" title="Ver esta diplomatura en Back Office">&#8599; Back Office</button></td>'
+      + '</tr>';
+    if(expanded){
+      row += '<tr class="expand-row"><td colspan="10">' + renderDiplomaModulesPanel(d) + '</td></tr>';
+    }
+    return row;
+  }).join('');
+}
+
+function toggleDiplomaExpand(diplomaCommissionId){
+  expandedDiplomaId = (expandedDiplomaId === diplomaCommissionId) ? null : diplomaCommissionId;
+  renderDiplomasRows();
+}
+
+function toggleDipCohortPostulantes(cohortId){
+  if(expandedDipCohortId === cohortId){
+    expandedDipCohortId = null;
+    renderDiplomasRows();
+    return;
+  }
+  expandedDipCohortId = cohortId;
+  if(!postulantesCache[cohortId]){
+    postulantesCache[cohortId] = { loading: true, postulantes: [], error: null };
+    fetch('/api/comision-postulantes?cohortId=' + encodeURIComponent(cohortId))
+      .then(r => r.json())
+      .then(payload => {
+        postulantesCache[cohortId] = { loading: false, postulantes: (payload && payload.postulantes) || [], error: payload && payload.error ? payload.error : null };
+        if(expandedDipCohortId === cohortId) renderDiplomasRows();
+      })
+      .catch(err => {
+        postulantesCache[cohortId] = { loading: false, postulantes: [], error: err && err.message ? err.message : String(err) };
+        if(expandedDipCohortId === cohortId) renderDiplomasRows();
+      });
+  } else {
+    renderDiplomasRows();
+  }
+}
+
+function renderDiplomaModulesPanel(d){
+  let html = '<div class="expand-panel"><div class="expand-panel-title">Modulos y comisiones de la diplomatura #' + d.commission + ' &middot; ' + escapeHtml(d.course) + '</div>';
+  (d.modules || []).forEach(m => {
+    html += '<div class="hist-group-label">Modulo ' + m.sequence + ' &middot; ' + m.startDate + ' a ' + m.endDate + '</div>';
+    (m.cohorts || []).forEach(c => {
+      const n = c.postulantesCount || 0;
+      const postuBadge = n > 0
+        ? '<span class="postu-badge has-postulantes" data-cohort="' + c.cohortId + '" onclick="toggleDipCohortPostulantes(\'' + c.cohortId + '\')">' + n + ' postulante' + (n > 1 ? 's' : '') + ' <span class="chev">&#9660;</span></span>'
+        : '<span class="postu-badge none">Sin postulantes</span>';
+      const profesores = [c.profesor1, c.profesor2].filter(Boolean).join(' y ');
+      html += '<div class="hist-item"><div class="com-left">'
+        + '<span class="com-curso" data-cohort-id="' + c.cohortId + '" style="cursor:pointer;" title="Clic para copiar los datos de esta comision">' + escapeHtml(c.course) + ' <span class="com-num">#' + c.commission + '</span></span>'
+        + '<span class="com-fechas">Inicio: ' + c.startDate + ' &middot; Fin: ' + c.endDate + ' &middot; Dia: ' + (c.days || '-') + ' &middot; Horario: ' + (c.horaInicio ? (c.horaInicio + ' a ' + c.horaFin) : '-') + ' &middot; Profesor: ' + (profesores || '<span class="prof-empty">Sin asignar</span>') + '</span>'
+        + '</div>'
+        + '<div class="hist-right">' + postuBadge + '<button class="bo-btn" onclick="openBackOffice(\'' + c.cohortId + '\')" title="Ver esta comision en Back Office">&#8599; Back Office</button></div>'
+        + '</div>';
+      if(expandedDipCohortId === c.cohortId){
+        html += renderPostulantesPanel(c);
+      }
+    });
+  });
+  html += '</div>';
+  return html;
+}
+
+function findDipCohortByCohortId(cohortId){
+  for(const d of DIP_DATA){
+    for(const m of (d.modules || [])){
+      const c = (m.cohorts || []).find(x => x.cohortId === cohortId);
+      if(c) return c;
+    }
+  }
+  return null;
+}
+
+document.getElementById('dipTbody').addEventListener('click', function(e){
+  const commTd = e.target.closest('td.commission[data-idx]');
+  if(commTd){
+    const idx = parseInt(commTd.getAttribute('data-idx'), 10);
+    const d = dipVisibleRows[idx];
+    if(d) copyDiplomaInfo(d);
+    return;
+  }
+  const cursoSpan = e.target.closest('.com-curso[data-cohort-id]');
+  if(cursoSpan){
+    const c = findDipCohortByCohortId(cursoSpan.getAttribute('data-cohort-id'));
+    if(c) copyComisionInfo(c);
+  }
+});
 </script>
 </body>
 </html>
