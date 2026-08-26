@@ -2050,7 +2050,7 @@ function desaprobarCert(id){
 }
 function habilitarDeNuevoCert(id){
   postCertAction('habilitarDeNuevo', { id }).then(resp => {
-    if(resp && resp.ok){ showToast('Se habilito un nuevo intento para esta persona, sin esperar los 3 meses.'); loadCertificaciones(); }
+    if(resp && resp.ok){ showToast('Se habilito un nuevo intento para esta persona, sin esperar los 6 meses.'); loadCertificaciones(); }
     else showToast('No se pudo habilitar: ' + ((resp && resp.error) || ''), 4000);
   });
 }
