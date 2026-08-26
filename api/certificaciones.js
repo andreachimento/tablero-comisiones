@@ -18,7 +18,7 @@
 // ============================================================================
 
 const { getOverlay, setOverlay, personKey, getAccountsForPerson } = require('../lib/overlay');
-const { getAllCertificaciones, saveCertificacion, getAllPreguntas, getPreguntas, savePreguntas, genId } = require('../lib/certificaciones');
+const { getAllCertificaciones, saveCertificacion, getAllPreguntas, getPreguntas, savePreguntas, genId, getAllExcepciones, addExcepcion, quitarExcepcion } = require('../lib/certificaciones');
 const { getPostHogRatings } = require('../lib/posthog');
 
 const RATING_MINIMO = 4.7;
@@ -120,6 +120,14 @@ async function calcularSemaforo(email, overlay, env) {
 // credenciales) - queda el lugar listo para conectarlo sin tener que tocar
 // el resto de la logica de aprobar/desaprobar.
 async function enviarMailDecision(cert, decision) {
+  // Las certificaciones que vienen de una excepcion (candidatos en proceso
+  // de seleccion, sin mail de Coderhouse todavia) NO reciben este mail: es
+  // un proceso distinto, el contacto con esa persona lo maneja el equipo de
+  // Coderhouse directamente.
+  if (cert.esExcepcion) {
+    console.log('[certificaciones] No se envia mail de ' + decision + ' a', cert.email, '(certificacion via excepcion)');
+    return { enviado: false, motivo: 'No se envia mail: certificacion via excepcion (proceso de seleccion)' };
+  }
   // TODO: conectar un servicio de mail (Resend / SendGrid / el que se elija)
   // usando una Environment Variable con la API key, y armar aca el texto:
   //  - aprobado: puede mencionar el curso+rol.
@@ -153,9 +161,12 @@ module.exports = async function handler(req, res) {
         checklist: c.estado === 'pendiente' ? semaforoPorCert[c.id] : null,
       }));
 
+      const excepciones = await getAllExcepciones();
+
       res.status(200).json({
         certificaciones: certsConSemaforo,
         preguntas,
+        excepciones,
         ratingMinimo: RATING_MINIMO,
         diasRecencia: DIAS_RECENCIA,
       });
@@ -216,6 +227,21 @@ module.exports = async function handler(req, res) {
         cert.reintentoHabilitadoManual = true;
         await saveCertificacion(cert);
         res.status(200).json({ ok: true, cert });
+        return;
+      }
+      case 'agregarExcepcion': {
+        const { nombre, email, curso, rol } = payload;
+        if (!email || !curso || !rol) { res.status(400).json({ error: 'Faltan datos (email, curso y rol son obligatorios)' }); return; }
+        if (!['profesor', 'tutor'].includes(rol)) { res.status(400).json({ error: 'Rol invalido' }); return; }
+        const excep = await addExcepcion({ nombre, email, curso, rol, agregadaPor: payload.agregadaPor || '' });
+        res.status(200).json({ ok: true, excepcion: excep });
+        return;
+      }
+      case 'quitarExcepcion': {
+        const { id } = payload;
+        if (!id) { res.status(400).json({ error: 'Falta el id' }); return; }
+        await quitarExcepcion(id);
+        res.status(200).json({ ok: true });
         return;
       }
       case 'addPregunta': {
