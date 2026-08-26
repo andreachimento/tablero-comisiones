@@ -220,6 +220,10 @@
   /* Postulaciones dentro del perfil: se ven maximo ~5 sin agrandar la
      pagina, el resto se scrollea. */
   .postu-scroll { max-height: 336px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
+  /* Comisiones finalizadas dentro del perfil: se ven 3-4 sin scrollear, el
+     resto queda en esta franja con scroll para no alargar el perfil. */
+  .hist-finalizadas-scroll { max-height: 240px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
+  .scroll-hint { text-align: center; font-size: 10px; color: var(--ink-soft); font-style: italic; margin-top: 2px; }
   .hist-item-asignada { background: var(--amber-bg); }
   .hist-item-curso { background: var(--green-bg); }
   .hist-item-final { background: var(--line-soft); }
@@ -329,12 +333,23 @@
   .cert-check-row-ok-bad { display: flex; align-items: center; gap: 5px; }
   .cert-check-row-ok-bad.ok { color: var(--green); }
   .cert-check-row-ok-bad.bad { color: var(--red); }
+  .cert-pend-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .cert-btn { border: none; border-radius: 7px; padding: 6px 13px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .cert-btn.aprobar { background: var(--green); color: white; }
+  .cert-btn.aprobar:hover { background: #0b8059; }
+  .cert-btn.desaprobar { background: white; color: var(--red); border: 1px solid var(--red); }
+  .cert-btn.desaprobar:hover { background: var(--red-bg); }
 
   /* --- Certificaciones: pantalla de gestion de preguntas --- */
   .preg-opcion-input:focus { border-color: var(--accent); background: white; }
+
+  .btn-excel { margin-top: 0; background: var(--green); color: white; border: none; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-excel:hover { background: #0b8059; }
+  .btn-excel:disabled { opacity: .6; cursor: default; }
 </style>
 </head>
 <body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <div class="header">
   <div class="titlewrap">
     <div>
@@ -498,6 +513,7 @@
   </select>
   <button class="clear-btn" onclick="clearCertFilters()">&#10005; Limpiar filtros</button>
   <button class="btn-add" style="margin-top:0;" onclick="abrirGestionPreguntas()">&#9998; Gestionar preguntas</button>
+  <button class="btn-excel" id="btnExportCert" onclick="exportarCertificacionesExcel()">&#11015; Exportar Excel</button>
   <span class="result-count" id="certResultCount"></span>
 </div>
 
@@ -1301,12 +1317,16 @@ function loadCertificacionesPerfil(email){
         if(chk.ultimaComisionFecha) filas.push('<div class="cert-check-row-ok-bad ' + (chk.recienteOk ? 'ok' : 'bad') + '">' + (chk.recienteOk ? '&#10003;' : '&#10007;') + ' Ultima comision: ' + formatFechaCorta(chk.ultimaComisionFecha) + '</div>');
         else filas.push('<div class="cert-check-row-ok-bad bad">&#10007; Sin comisiones registradas</div>');
         return '<div class="cert-pend-item-perfil ' + (chk.semaforo === 'verde' ? 'semaforo-verde' : 'semaforo-rojo') + '">'
-          + '<div style="flex:1;"><div style="font-weight:700;font-size:12.5px;">' + escapeHtml(c.curso) + ' &middot; ' + rolLabel + '</div>'
+          + '<div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:12.5px;">' + escapeHtml(c.curso) + ' &middot; ' + rolLabel + '</div>'
           + '<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">Evaluacion rendida el ' + formatFechaCorta(c.fecha) + '</div>'
-          + '<div style="margin-top:6px;font-size:11px;">' + filas.join('') + '</div></div>'
+          + '<div style="margin-top:6px;font-size:11px;">' + filas.join('') + '</div>'
+          + '<div class="cert-pend-actions">'
+          + '<button class="cert-btn aprobar" onclick="aprobarCertPerfil(\'' + c.id + '\')">&#10003; Aprobar</button>'
+          + '<button class="cert-btn desaprobar" onclick="desaprobarCertPerfil(\'' + c.id + '\')">&#10005; Desaprobar</button>'
+          + '</div></div>'
           + '<div style="font-weight:800;font-size:13px;white-space:nowrap;">' + Number(c.nota).toFixed(1) + '/10</div>'
           + '</div>';
-      }).join('') + '<div class="field-hint" style="margin-top:6px;">Para aprobar o desaprobar, se hace desde la solapa Certificaciones.</div>';
+      }).join('') + '<div class="field-hint" style="margin-top:6px;">Al aprobar o desaprobar se agrega (o no) el curso al perfil y se dispara el mail con la decision.</div>';
     })
     .catch(err => {
       if(body) body.innerHTML = '<p style="font-size:12px;color:var(--red);">No se pudieron cargar las certificaciones: ' + escapeHtml(err.message) + '</p>';
@@ -1404,8 +1424,6 @@ function renderStaffProfile(p){
     || '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no hay comentarios.</p>';
   html += '</div></div>';
 
-  html += '<div class="card" id="certPendientesCard"><h3>Certificaciones pendientes</h3><div id="certPendientesBody"><p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Cargando...</p></div></div>';
-
   html += '<div class="card"><h3>Cursos habilitados a dictar</h3>'
     + '<div class="add-course-row">'
     + '<input type="text" id="newCursoNombre" list="cursoDatalist" placeholder="Nombre del curso..." style="flex:1;min-width:160px;">'
@@ -1472,29 +1490,42 @@ function renderStaffProfile(p){
   ];
   const hist = p.historial || [];
   let anyHist = false;
+  // Finalizadas se muestran de a pocas (3-4) para no alargar el perfil; si
+  // hay mas, el resto queda dentro de una franja con scroll en vez de listarse
+  // todas sueltas.
+  const FINALIZADAS_VISIBLES_SIN_SCROLL = 4;
+  function histItemHtml(h, g){
+    const tipoClass = h.tipoAsignacion === 'Suplente' ? 'tipo-suplente' : (h.tipoAsignacion === 'Reemplazo' ? 'tipo-reemplazo' : 'tipo-titular');
+    const linkClass = h.cohortId ? ' hist-item-link' : '';
+    const linkAttr = h.cohortId ? ' onclick="openBackOffice(\'' + escapeHtml(String(h.cohortId)) + '\')" title="Ver esta comision en Back Office"' : '';
+    const linkHint = h.cohortId ? '<div class="hist-item-link-hint">Ver en Back Office &rarr;</div>' : '';
+    let out = '<div class="hist-item ' + g.itemClass + linkClass + '"' + linkAttr + '><div class="com-left"><span class="com-curso">' + escapeHtml(h.curso) + ' <span class="com-num">#' + h.comisionNumber + '</span></span>'
+      + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Horario: ' + (h.horaInicio ? (h.horaInicio + ' a ' + h.horaFin) : '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span>' + linkHint + '</div>'
+      + '<div class="hist-right"><span class="hist-status ' + g.statusClass + '">' + g.statusLabel + '</span>';
+    if(g.key === 'finalizada'){
+      out += '<span class="stars-small" data-cohort="' + h.cohortId + '" data-rating="' + (h.rating || 0) + '"></span>';
+    } else {
+      out += '<span class="no-rating">Aun no calificada</span>';
+    }
+    out += '</div></div>';
+    return out;
+  }
   groups.forEach(g => {
     const items = hist.filter(h => h.estadoComision === g.key);
     if(!items.length) return;
     anyHist = true;
     html += '<div class="hist-group-label">' + g.label + '</div>';
-    items.forEach(h => {
-      const tipoClass = h.tipoAsignacion === 'Suplente' ? 'tipo-suplente' : (h.tipoAsignacion === 'Reemplazo' ? 'tipo-reemplazo' : 'tipo-titular');
-      const linkClass = h.cohortId ? ' hist-item-link' : '';
-      const linkAttr = h.cohortId ? ' onclick="openBackOffice(\'' + escapeHtml(String(h.cohortId)) + '\')" title="Ver esta comision en Back Office"' : '';
-      const linkHint = h.cohortId ? '<div class="hist-item-link-hint">Ver en Back Office &rarr;</div>' : '';
-      html += '<div class="hist-item ' + g.itemClass + linkClass + '"' + linkAttr + '><div class="com-left"><span class="com-curso">' + escapeHtml(h.curso) + ' <span class="com-num">#' + h.comisionNumber + '</span></span>'
-        + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Horario: ' + (h.horaInicio ? (h.horaInicio + ' a ' + h.horaFin) : '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span>' + linkHint + '</div>'
-        + '<div class="hist-right"><span class="hist-status ' + g.statusClass + '">' + g.statusLabel + '</span>';
-      if(g.key === 'finalizada'){
-        html += '<span class="stars-small" data-cohort="' + h.cohortId + '" data-rating="' + (h.rating || 0) + '"></span>';
-      } else {
-        html += '<span class="no-rating">Aun no calificada</span>';
-      }
-      html += '</div></div>';
-    });
+    if(g.key === 'finalizada' && items.length > FINALIZADAS_VISIBLES_SIN_SCROLL){
+      html += '<div class="hist-finalizadas-scroll">' + items.map(h => histItemHtml(h, g)).join('') + '</div>';
+      html += '<div class="scroll-hint">&#8597; scrollea para ver comisiones finalizadas mas antiguas (' + items.length + ' en total)</div>';
+    } else {
+      items.forEach(h => { html += histItemHtml(h, g); });
+    }
   });
   if(!anyHist) html += '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Sin comisiones todavia.</p>';
   html += '</div>';
+
+  html += '<div class="card" id="certPendientesCard"><h3>Certificaciones pendientes</h3><div id="certPendientesBody"><p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Cargando...</p></div></div>';
 
   html += '</div>'; // fin grid-2
 
@@ -2053,6 +2084,74 @@ function habilitarDeNuevoCert(id){
     if(resp && resp.ok){ showToast('Se habilito un nuevo intento para esta persona, sin esperar los 6 meses.'); loadCertificaciones(); }
     else showToast('No se pudo habilitar: ' + ((resp && resp.error) || ''), 4000);
   });
+}
+
+// Mismas acciones que aprobarCert/desaprobarCert, pero invocadas desde la
+// tarjeta "Certificaciones pendientes" dentro del perfil de la persona en vez
+// de la tabla de la solapa Certificaciones. Al terminar se vuelve a cargar
+// todo el perfil (loadStaffProfile) en lugar de la tabla, porque aca tambien
+// hay que refrescar "Cursos habilitados a dictar" si quedo aprobado.
+function aprobarCertPerfil(id){
+  postCertAction('aprobar', { id }).then(resp => {
+    if(resp && resp.ok){
+      showToast('Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.');
+      if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
+    } else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+function desaprobarCertPerfil(id){
+  postCertAction('desaprobar', { id }).then(resp => {
+    if(resp && resp.ok){
+      showToast('Certificacion desaprobada. Se disparo el mail generico de rechazo.');
+      if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
+    } else showToast('No se pudo desaprobar: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+// Exporta TODAS las certificaciones (sin importar los filtros que haya
+// puestos en pantalla en ese momento) a un .xlsx, para tener siempre un
+// respaldo completo con un clic. Usa la libreria SheetJS cargada en el
+// <head>.
+function exportarCertificacionesExcel(){
+  const btn = document.getElementById('btnExportCert');
+  if(typeof XLSX === 'undefined'){
+    showToast('No se pudo cargar la libreria de Excel. Revisa tu conexion e intenta de nuevo.', 4000);
+    return;
+  }
+  const filas = (CERT_RESP.certificaciones || []).map(c => {
+    const chk = c.checklist || {};
+    return {
+      'Persona': c.nombre || '',
+      'Email': c.email || '',
+      'Curso': c.curso || '',
+      'Rol': ROLE_LABELS[c.rol] || c.rol || '',
+      'Nota': c.nota != null ? Number(c.nota) : '',
+      'Estado': c.estado === 'pendiente' ? 'Pendiente' : (c.estado === 'aprobado' ? 'Aprobado' : (c.estado === 'desaprobado' ? 'Desaprobado' : (c.estado || ''))),
+      'Semaforo': chk.semaforo ? (chk.semaforo === 'verde' ? 'Verde' : 'Rojo') : '',
+      'Rating al evaluar': chk.ratingPromedio != null ? chk.ratingPromedio : '',
+      'Ultima comision': chk.ultimaComisionFecha ? formatFechaCorta(chk.ultimaComisionFecha) : '',
+      'Fecha evaluacion': formatFechaCorta(c.fecha),
+      'Fecha decision': c.fechaDecision ? formatFechaCorta(c.fechaDecision) : '',
+      'Puede reintentar desde': c.cooldownHasta ? formatFechaCorta(c.cooldownHasta) : '',
+    };
+  });
+  if(!filas.length){
+    showToast('No hay certificaciones para exportar todavia.', 3000);
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando...'; }
+  try {
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    hoja['!cols'] = [ {wch:24}, {wch:28}, {wch:30}, {wch:14}, {wch:8}, {wch:13}, {wch:9}, {wch:14}, {wch:15}, {wch:15}, {wch:15}, {wch:17} ];
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Certificaciones');
+    const fechaArchivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, 'certificaciones_coderhouse_' + fechaArchivo + '.xlsx');
+  } catch(err){
+    showToast('No se pudo generar el Excel: ' + err.message, 4000);
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = '&#11015; Exportar Excel'; }
+  }
 }
 
 // ---------------------------------------------------------------------------
