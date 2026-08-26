@@ -202,7 +202,7 @@ module.exports = async function handler(req, res) {
         cert.estado = 'desaprobado';
         cert.fechaDecision = new Date().toISOString();
         const hoy = new Date();
-        cert.cooldownHasta = new Date(hoy.getFullYear(), hoy.getMonth() + 3, hoy.getDate()).toISOString();
+        cert.cooldownHasta = new Date(hoy.getFullYear(), hoy.getMonth() + 6, hoy.getDate()).toISOString();
         await saveCertificacion(cert);
         const mail = await enviarMailDecision(cert, 'desaprobado');
         res.status(200).json({ ok: true, cert, mail });
