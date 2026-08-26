@@ -492,6 +492,18 @@
 
 <div class="stats" id="statsCert"></div>
 
+<div class="card">
+  <h3>Habilitar evaluacion sin mail de Coderhouse <span style="font-weight:500;font-size:11px;color:var(--ink-soft);">(casos aislados: candidatos en proceso de seleccion que todavia no tienen +profesor/+tutor)</span></h3>
+  <div class="add-course-row">
+    <input type="text" id="newExcepNombre" placeholder="Nombre y apellido..." style="flex:1;min-width:150px;">
+    <input type="text" id="newExcepEmail" placeholder="Email (el que va a usar para rendir)..." style="flex:1;min-width:200px;">
+    <input type="text" id="newExcepCurso" list="cursoDatalist" placeholder="Curso..." style="flex:1;min-width:160px;">
+    <select id="newExcepRol"><option value="profesor">Profesor</option><option value="tutor">Tutor Adjunto</option></select>
+    <button class="btn-add" style="margin-top:0;" onclick="addExcepcionCert()">+ Habilitar</button>
+  </div>
+  <div id="excepcionesListWrap"></div>
+</div>
+
 <div class="controls">
   <span class="filter-label">Curso</span>
   <select id="fCertCurso" onchange="applyCertFilters()"><option value="">Todos los cursos</option></select>
@@ -1935,7 +1947,7 @@ document.getElementById('dipTbody').addEventListener('click', function(e){
 // persona desde esta pestaña.
 // ============================================================================
 
-let CERT_RESP = { certificaciones: [], preguntas: {}, ratingMinimo: 4.7, diasRecencia: 365 };
+let CERT_RESP = { certificaciones: [], preguntas: {}, excepciones: [], ratingMinimo: 4.7, diasRecencia: 365 };
 let certLoadedOnce = false;
 let certVisibleRows = [];
 
@@ -1953,10 +1965,49 @@ function loadCertificaciones(){
       renderCertStats();
       buildCertCourseFilter();
       applyCertFilters();
+      renderExcepciones();
     })
     .catch(err => {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--red);">No se pudieron cargar las certificaciones: ' + escapeHtml(err.message) + '</td></tr>';
     });
+}
+
+function renderExcepciones(){
+  const wrap = document.getElementById('excepcionesListWrap');
+  if(!wrap) return;
+  const lista = CERT_RESP.excepciones || [];
+  if(!lista.length){
+    wrap.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;margin-top:6px;">No hay excepciones activas.</p>';
+    return;
+  }
+  wrap.innerHTML = '<div class="curso-rol-label" style="margin-top:10px;">Excepciones activas (' + lista.length + ')</div>'
+    + lista.map(e => '<div class="habilitado-item"><span class="curso-nombre">' + escapeHtml(e.nombre || '(sin nombre)') + '</span>'
+      + '<span style="color:var(--ink-soft);font-size:11px;flex:1;margin:0 10px;">' + escapeHtml(e.email || '') + ' &middot; ' + escapeHtml(e.curso || '') + ' &middot; ' + (e.rol === 'profesor' ? 'Profesor' : 'Tutor Adjunto') + ' &middot; agregada el ' + formatFechaCorta(e.fecha) + '</span>'
+      + '<button class="bo-btn" style="color:var(--red);" onclick="quitarExcepcionCert(\'' + e.id + '\')">Quitar</button></div>').join('');
+}
+
+function addExcepcionCert(){
+  const nombre = document.getElementById('newExcepNombre').value.trim();
+  const email = document.getElementById('newExcepEmail').value.trim().toLowerCase();
+  const curso = document.getElementById('newExcepCurso').value.trim();
+  const rol = document.getElementById('newExcepRol').value;
+  if(!email || !curso || !rol){ showToast('Completa email y curso antes de habilitar.', 4000); return; }
+  postCertAction('agregarExcepcion', { nombre, email, curso, rol }).then(resp => {
+    if(resp && resp.ok){
+      showToast('Excepcion cargada. Esa persona ya puede rendir esa evaluacion con ese mail.');
+      document.getElementById('newExcepNombre').value = '';
+      document.getElementById('newExcepEmail').value = '';
+      document.getElementById('newExcepCurso').value = '';
+      loadCertificaciones();
+    } else showToast('No se pudo cargar la excepcion: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function quitarExcepcionCert(id){
+  postCertAction('quitarExcepcion', { id }).then(resp => {
+    if(resp && resp.ok){ showToast('Excepcion eliminada.'); loadCertificaciones(); }
+    else showToast('No se pudo quitar: ' + ((resp && resp.error) || ''), 4000);
+  });
 }
 
 function renderCertStats(){
@@ -2046,8 +2097,9 @@ function renderCertRows(){
     } else if(c.estado === 'desaprobado'){
       acciones = '<button class="bo-btn" onclick="habilitarDeNuevoCert(\'' + c.id + '\')">Habilitar de nuevo</button>';
     }
+    const excepTag = c.esExcepcion ? ' <span style="background:var(--accent-light);color:var(--accent-dark);font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:999px;vertical-align:1px;">EXCEPCION</span>' : '';
     return '<tr>'
-      + '<td><span class="staff-name">' + escapeHtml(c.nombre || '') + '</span><div style="font-size:10.5px;color:var(--ink-soft);">' + escapeHtml(c.email || '') + '</div></td>'
+      + '<td><span class="staff-name">' + escapeHtml(c.nombre || '') + '</span>' + excepTag + '<div style="font-size:10.5px;color:var(--ink-soft);">' + escapeHtml(c.email || '') + '</div></td>'
       + '<td>' + escapeHtml(c.curso || '') + '</td>'
       + '<td>' + rolLabel + '</td>'
       + '<td style="font-weight:700;">' + (c.nota != null ? Number(c.nota).toFixed(1) : '-') + '/10</td>'
@@ -2069,13 +2121,21 @@ function postCertAction(action, payload){
 
 function aprobarCert(id){
   postCertAction('aprobar', { id }).then(resp => {
-    if(resp && resp.ok){ showToast('Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.'); loadCertificaciones(); }
+    if(resp && resp.ok){
+      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
+      showToast(viaExcepcion ? 'Certificacion aprobada. Se agrego el curso al perfil (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.');
+      loadCertificaciones();
+    }
     else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
   });
 }
 function desaprobarCert(id){
   postCertAction('desaprobar', { id }).then(resp => {
-    if(resp && resp.ok){ showToast('Certificacion desaprobada. Se disparo el mail generico de rechazo.'); loadCertificaciones(); }
+    if(resp && resp.ok){
+      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
+      showToast(viaExcepcion ? 'Certificacion desaprobada (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion desaprobada. Se disparo el mail generico de rechazo.');
+      loadCertificaciones();
+    }
     else showToast('No se pudo desaprobar: ' + ((resp && resp.error) || ''), 4000);
   });
 }
@@ -2094,7 +2154,8 @@ function habilitarDeNuevoCert(id){
 function aprobarCertPerfil(id){
   postCertAction('aprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      showToast('Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.');
+      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
+      showToast(viaExcepcion ? 'Certificacion aprobada. Se agrego el curso al perfil (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.');
       if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
     } else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
   });
@@ -2102,7 +2163,8 @@ function aprobarCertPerfil(id){
 function desaprobarCertPerfil(id){
   postCertAction('desaprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      showToast('Certificacion desaprobada. Se disparo el mail generico de rechazo.');
+      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
+      showToast(viaExcepcion ? 'Certificacion desaprobada (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion desaprobada. Se disparo el mail generico de rechazo.');
       if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
     } else showToast('No se pudo desaprobar: ' + ((resp && resp.error) || ''), 4000);
   });
