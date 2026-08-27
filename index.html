@@ -305,6 +305,15 @@
   .rating-comment-text { font-size: 12.5px; color: var(--ink); line-height: 1.5; }
   .rating-comment-text.empty { color: var(--ink-soft); font-style: italic; }
 
+  /* --- Certificaciones: detalle de respuestas de la evaluacion --- */
+  .resp-q-block { border-bottom: 1px solid var(--line-soft); padding: 12px 0; }
+  .resp-q-block:last-child { border-bottom: none; }
+  .resp-q-text { font-weight: 700; font-size: 12.5px; margin-bottom: 6px; }
+  .resp-q-answer { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+  .resp-q-answer.acierto { background: var(--green-bg); color: var(--green); }
+  .resp-q-answer.error { background: var(--red-bg); color: var(--red); }
+  .resp-q-answer.sinresp { background: var(--gris-bg); color: var(--gris); font-style: italic; }
+
   /* --- Postulaciones en el perfil de la persona: mismo cruce de colores --- */
   .hist-item.elig-verde { border-left: 4px solid var(--green); }
   .hist-item.elig-naranja { border-left: 4px solid var(--amber); }
@@ -587,6 +596,19 @@
   <div class="modal-box">
     <div class="modal-header"><h3>Comentarios de la encuesta</h3><span class="modal-close" onclick="closeRatingModal()">&times;</span></div>
     <div class="modal-body" id="ratingModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="respuestasModalOverlay" onclick="if(event.target === this) closeRespuestasModal()">
+  <div class="modal-box" style="width:min(640px,100%);">
+    <div class="modal-header">
+      <div>
+        <h3>Respuestas de la evaluacion</h3>
+        <div id="respuestasModalSub" style="font-size:11.5px;color:var(--ink-soft);margin-top:3px;font-weight:500;"></div>
+      </div>
+      <span class="modal-close" onclick="closeRespuestasModal()">&times;</span>
+    </div>
+    <div class="modal-body" id="respuestasModalBody"></div>
   </div>
 </div>
 
@@ -1688,6 +1710,38 @@ function closeRatingModal(){
   document.getElementById('ratingModalOverlay').classList.add('hidden');
 }
 
+function openRespuestasModal(id){
+  const c = (CERT_RESP.certificaciones || []).find(x => x.id === id);
+  const sub = document.getElementById('respuestasModalSub');
+  const body = document.getElementById('respuestasModalBody');
+  if(!c){
+    sub.textContent = '';
+    body.innerHTML = '<p style="color:var(--red);">No se encontro esa certificacion.</p>';
+    document.getElementById('respuestasModalOverlay').classList.remove('hidden');
+    return;
+  }
+  const rolLabel = c.rol === 'profesor' ? 'Profesor' : 'Tutor Adjunto';
+  sub.textContent = (c.nombre || c.email) + ' · ' + c.curso + ' · ' + rolLabel + ' · ' + (c.nota != null ? Number(c.nota).toFixed(1) : '-') + '/10 · rendida el ' + formatFechaCorta(c.fecha);
+  const respuestas = c.respuestas || [];
+  if(!respuestas.length){
+    body.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">No hay detalle de respuestas guardado para esta certificacion (evaluaciones rendidas antes de esta funcion).</p>';
+  } else {
+    body.innerHTML = respuestas.map((r, i) => {
+      let tagClass = 'sinresp', tagTxt = 'Sin responder';
+      if(r.elegidaTexto != null){
+        tagClass = r.acierto ? 'acierto' : 'error';
+        tagTxt = (r.acierto ? '✓ Correcta · ' : '✗ Incorrecta · ') + 'Eligio: "' + escapeHtml(r.elegidaTexto) + '"';
+      }
+      return '<div class="resp-q-block"><div class="resp-q-text">' + (i + 1) + '. ' + escapeHtml(r.pregunta || '') + '</div>'
+        + '<span class="resp-q-answer ' + tagClass + '">' + tagTxt + '</span></div>';
+    }).join('');
+  }
+  document.getElementById('respuestasModalOverlay').classList.remove('hidden');
+}
+function closeRespuestasModal(){
+  document.getElementById('respuestasModalOverlay').classList.add('hidden');
+}
+
 function setStaffRating(cohortId, rating){
   postStaffUpdate('setRating', { cohortId: cohortId, rating: rating }).then(resp => {
     if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
@@ -2090,12 +2144,12 @@ function renderCertRows(){
     if(c.estado === 'desaprobado' && c.cooldownHasta && new Date(c.cooldownHasta) > new Date()){
       cooldownNote = '<div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">Bloqueado hasta ' + formatFechaCorta(c.cooldownHasta) + '</div>';
     }
-    let acciones = '';
+    let acciones = '<button class="bo-btn" onclick="openRespuestasModal(\'' + c.id + '\')">Ver respuestas</button> ';
     if(c.estado === 'pendiente'){
-      acciones = '<button class="bo-btn" style="color:var(--green);" onclick="aprobarCert(\'' + c.id + '\')">Aprobar</button> '
+      acciones += '<button class="bo-btn" style="color:var(--green);" onclick="aprobarCert(\'' + c.id + '\')">Aprobar</button> '
         + '<button class="bo-btn" style="color:var(--red);" onclick="desaprobarCert(\'' + c.id + '\')">Desaprobar</button>';
     } else if(c.estado === 'desaprobado'){
-      acciones = '<button class="bo-btn" onclick="habilitarDeNuevoCert(\'' + c.id + '\')">Habilitar de nuevo</button>';
+      acciones += '<button class="bo-btn" onclick="habilitarDeNuevoCert(\'' + c.id + '\')">Habilitar de nuevo</button>';
     }
     const excepTag = c.esExcepcion ? ' <span style="background:var(--accent-light);color:var(--accent-dark);font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:999px;vertical-align:1px;">EXCEPCION</span>' : '';
     return '<tr>'
