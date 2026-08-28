@@ -22,6 +22,8 @@ const MONTHS_AHEAD = 4;
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
 const TZ = 'America/Argentina/Buenos_Aires';
 
+const { CLASS_DURATION_MS, fetchClassDurationsMs } = require('../lib/elegibilidad');
+
 function getEnv() {
   const BASE = process.env.BACKOFFICE_API_URL;
   const STUDENT_KEY = process.env.CLAUDE_STUDENT_API_KEY;
@@ -230,12 +232,21 @@ async function buildRows() {
     byCohort[a.cohortId].push(a);
   });
 
+  // Duracion real de clase por comision (ver comentario en lib/elegibilidad.js):
+  // reemplaza el supuesto fijo de 2hs, que estaba mal para cursos con clases
+  // mas largas o mas cortas (ej: comision 102315, clases de 2.5hs).
+  let durationByCohort = {};
+  try {
+    durationByCohort = await fetchClassDurationsMs(cohorts.map(c => c.id), env.BASE, env.STUDENT_KEY);
+  } catch (e) { /* si falla, todas caen al fallback de 2hs de mas abajo */ }
+
   const rows = cohorts.map(c => {
     const course = products[c.productId] || c.name;
     const startAR = c.startDate ? new Date(c.startDate) : null;
     const endAR = c.endDate ? new Date(c.endDate) : null;
+    const durationMs = durationByCohort[c.id] || CLASS_DURATION_MS;
     const horaInicio = startAR ? timeHM(startAR) : '';
-    const horaFin = startAR ? timeHM(new Date(startAR.getTime() + 2 * 3600 * 1000)) : '';
+    const horaFin = startAR ? timeHM(new Date(startAR.getTime() + durationMs)) : '';
 
     const staffList = byCohort[c.id] || [];
     const profs = staffList.filter(s => s.cohortRole === 'INSTRUCTOR' || s.cohortRole === 'PROFESOR');
