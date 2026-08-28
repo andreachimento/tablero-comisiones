@@ -10,7 +10,7 @@
 // ============================================================================
 
 const { getOverlay, personKey, getAllPostulaciones, getAccountsForPerson } = require('../lib/overlay');
-const { DAYS_MAP, ROLE_LABEL, CLASS_DURATION_MS, dateDMY, timeHM, minutesOfDay, classifyOverlap, computeColorReason, cursoMatches } = require('../lib/elegibilidad');
+const { DAYS_MAP, ROLE_LABEL, CLASS_DURATION_MS, dateDMY, timeHM, minutesOfDay, classifyOverlap, computeColorReason, cursoMatches, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 
 function getEnv() {
@@ -69,6 +69,15 @@ async function fetchVigentes(env, accounts, excludeCohortId) {
   const cohortById = {};
   cohorts.forEach(c => { if (c && c.id) cohortById[c.id] = c; });
 
+  // Duracion real de clase por comision (ver comentario en
+  // lib/elegibilidad.js): reemplaza el supuesto fijo de 2hs, tanto para lo
+  // que se muestra (horaFin en el tooltip) como para el calculo de
+  // superposicion de horarios (endMin, mas abajo).
+  let durationByCohort = {};
+  try {
+    durationByCohort = await fetchClassDurationsMs(cohortIds, env.BASE, env.STUDENT_KEY);
+  } catch (e) { /* si falla, todas caen al fallback de 2hs de mas abajo */ }
+
   const productIds = Array.from(new Set(Object.values(cohortById).map(c => c.productId).filter(Boolean)));
   const productEntries = await Promise.all(productIds.map(async pid => {
     try {
@@ -100,6 +109,7 @@ async function fetchVigentes(env, accounts, excludeCohortId) {
     if (estadoComision === 'finalizada') return null; // no interesa para superposicion ni para el tooltip
 
     const startMin = startAR ? minutesOfDay(startAR) : 0;
+    const durationMs = durationByCohort[c.id] || CLASS_DURATION_MS;
     return {
       cohortId: c.id,
       curso: productTitle[c.productId] || c.name,
@@ -107,7 +117,7 @@ async function fetchVigentes(env, accounts, excludeCohortId) {
       rol: ROLE_LABEL[a.cohortRole] || a.cohortRole || '',
       dia: (c.weekDays || []).slice().sort().map(d => DAYS_MAP[d] || '').join('/'),
       horaInicio: startAR ? timeHM(startAR) : '',
-      horaFin: startAR ? timeHM(new Date(startAR.getTime() + CLASS_DURATION_MS)) : '',
+      horaFin: startAR ? timeHM(new Date(startAR.getTime() + durationMs)) : '',
       fechaInicio: startAR ? dateDMY(startAR) : '',
       fechaFin: endAR ? dateDMY(endAR) : '',
       estadoComision,
@@ -115,7 +125,7 @@ async function fetchVigentes(env, accounts, excludeCohortId) {
       startDate: startAR,
       endDate: endAR,
       startMin,
-      endMin: startMin + 120,
+      endMin: startMin + Math.round(durationMs / 60000),
     };
   }).filter(Boolean);
   return { vigentes, allCommissionNumbers };
@@ -147,12 +157,17 @@ module.exports = async function handler(req, res) {
     const targetStart = targetCohort.startDate ? new Date(targetCohort.startDate) : null;
     const targetEnd = targetCohort.endDate ? new Date(targetCohort.endDate) : null;
     const targetStartMin = targetStart ? minutesOfDay(targetStart) : 0;
+    let targetDurationMs = CLASS_DURATION_MS;
+    try {
+      const targetDur = await fetchClassDurationsMs([cohortId], env.BASE, env.STUDENT_KEY);
+      if (targetDur[cohortId]) targetDurationMs = targetDur[cohortId];
+    } catch (e) { /* se queda con el fallback de 2hs */ }
     const target = {
       weekDaysSet: new Set(targetCohort.weekDays || []),
       startDate: targetStart,
       endDate: targetEnd,
       startMin: targetStartMin,
-      endMin: targetStartMin + 120,
+      endMin: targetStartMin + Math.round(targetDurationMs / 60000),
     };
 
     // Primera pasada: juntamos overlay + agenda de cada postulante (esto ya
