@@ -12,7 +12,7 @@
 // fetch('/api/dashboard-data-diplomas') y recibe el JSON con las diplomaturas.
 // ============================================================================
 
-const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM } = require('../lib/elegibilidad');
+const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getAllPostulaciones } = require('../lib/overlay');
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -153,6 +153,13 @@ async function buildRows() {
     assignmentsByCohort[a.cohortId].push(a);
   });
 
+  // Duracion real de clase por comision interna (ver comentario en
+  // lib/elegibilidad.js): reemplaza el supuesto fijo de 2hs.
+  let durationByCohort = {};
+  try {
+    durationByCohort = await fetchClassDurationsMs(Array.from(allCohortIds), env.BASE, env.STUDENT_KEY);
+  } catch (e) { /* si falla, todas caen al fallback de 2hs de mas abajo */ }
+
   const modalidadLabel = { ONLINE: 'Online', ON_SITE: 'Presencial', HYBRID: 'Hibrido' };
 
   const rows = diplomas.map(d => {
@@ -169,6 +176,7 @@ async function buildRows() {
         const profNames = profs.map(s => users[s.userId] || String(s.userId).substring(0, 8));
         const postulantesCohort = postulantesCountByCohort[ca.cohortId] || 0;
         postulantesTotal += postulantesCohort;
+        const durationMs = durationByCohort[ca.cohortId] || CLASS_DURATION_MS;
         return {
           cohortId: ca.cohortId,
           commission: ca.commissionNumber,
@@ -177,7 +185,7 @@ async function buildRows() {
           profesor2: profNames[1] || '',
           days: (ca.weekDays || []).slice().sort().map(w => DAYS_MAP[w] || '').join('/'),
           horaInicio: startAR ? timeHM(startAR) : '',
-          horaFin: startAR ? timeHM(new Date(startAR.getTime() + CLASS_DURATION_MS)) : '',
+          horaFin: startAR ? timeHM(new Date(startAR.getTime() + durationMs)) : '',
           startDate: startAR ? dateDMY(startAR) : '',
           endDate: endAR ? dateDMY(endAR) : '',
           students: ca.currentStudents || 0,
