@@ -2129,14 +2129,23 @@ function certCourseNames(){
   // quedaban "invisibles" en el selector de Gestionar preguntas aunque las
   // preguntas ya existieran guardadas. La clave interna esta siempre en
   // minuscula (ver preguntasKeyFor), asi que se arma una version con
-  // mayusculas razonable solo para mostrarla - al elegirla, el propio
-  // backend la vuelve a pasar a minuscula para buscarla, asi que no hace
-  // falta que la capitalizacion sea exacta.
+  // mayusculas razonable solo para mostrarla. OJO: esta version mostrada es
+  // la que despues puede terminar guardada tal cual en otro lado (ej. si se
+  // usa para cargar una "Excepcion" desde este mismo curso sugerido) - por
+  // eso NO alcanza con capitalizar cualquier palabra ("Administración De
+  // Empresas" con mayuscula en "De" rompio en produccion el matcheo contra
+  // el nombre real "Administración de Empresas" en el sitio publico). Se
+  // capitaliza cada palabra salvo las preposiciones/articulos cortos
+  // tipicos del espanol, para que el resultado se parezca al nombre real.
+  const CURSO_MINUSCULAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'en', 'para', 'con', 'a', 'al', 'o', 'u', 'e']);
   const yaPresentes = new Set(Array.from(cursos).map(c => c.trim().toLowerCase()));
   Object.keys(CERT_RESP.preguntas || {}).forEach(key => {
     const cursoLower = key.split('|')[0];
     if (!cursoLower || yaPresentes.has(cursoLower)) return;
-    const cursoDisplay = cursoLower.replace(/(^|\s)([a-záéíóúñü])/g, (m, sep, ch) => sep + ch.toUpperCase());
+    const cursoDisplay = cursoLower.split(' ').map((palabra, i) => {
+      if (i > 0 && CURSO_MINUSCULAS.has(palabra)) return palabra;
+      return palabra.charAt(0).toUpperCase() + palabra.slice(1);
+    }).join(' ');
     cursos.add(cursoDisplay);
     yaPresentes.add(cursoLower);
   });
