@@ -261,7 +261,8 @@
   .expand-panel { padding: 16px 22px 20px; border-top: 1px dashed var(--line); }
   .expand-panel-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-soft); margin-bottom: 10px; }
   .postu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
-  .postu-card { border-radius: 10px; padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid; }
+  .postu-card { border-radius: 10px; padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid; cursor: pointer; transition: box-shadow .12s, transform .12s; }
+  .postu-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.12); transform: translateY(-1px); }
   .postu-card.c-verde { background: var(--green-bg); border-color: #bfe9d9; }
   .postu-card.c-naranja { background: var(--amber-bg); border-color: #f2ddaa; }
   .postu-card.c-rojo { background: var(--red-bg); border-color: #f5c6c1; }
@@ -272,7 +273,7 @@
   .c-rojo .postu-dot { background: var(--red); }
   .c-gris .postu-dot { background: var(--gris); }
   .postu-info { flex: 1; min-width: 0; }
-  .postu-name { font-weight: 700; font-size: 12.5px; color: var(--ink); cursor: default; border-bottom: 1px dotted var(--ink-soft); display: inline-block; }
+  .postu-name { font-weight: 700; font-size: 12.5px; color: var(--ink); cursor: pointer; border-bottom: 1px dotted var(--ink-soft); display: inline-block; }
   .postu-role { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; margin-left: 5px; }
   .postu-rating { font-size: 11px; margin-top: 3px; color: var(--ink-soft); }
   .postu-rating .stars { color: var(--line); letter-spacing: 1px; }
@@ -708,6 +709,12 @@ document.getElementById('tbody').addEventListener('click', function(e){
     toggleComisionExpand(badge.getAttribute('data-cohort'));
     return;
   }
+  const postuCard = e.target.closest('.postu-card[data-postu-key]');
+  if(postuCard){
+    const data = window.__eligTooltipData && window.__eligTooltipData[postuCard.getAttribute('data-postu-key')];
+    if(data && data.email) openStaffProfile(data.email);
+    return;
+  }
   const td = e.target.closest('td.commission');
   if(!td) return;
   const idx = parseInt(td.getAttribute('data-idx'), 10);
@@ -1029,11 +1036,15 @@ function renderPostulantesPanel(r){
   window.__eligTooltipData = window.__eligTooltipData || {};
   const cards = postulantes.map((p, i) => {
     const key = r.cohortId + '-' + i;
-    window.__eligTooltipData[key] = { nombre: p.nombre, tooltip: p.tooltip || { curso: [], futuro: [] } };
+    // Se guarda el email junto con lo que ya se usaba para el tooltip: asi,
+    // al hacer click en la card (ver mas abajo, listeners de #tbody y
+    // #dipTbody), se puede abrir el perfil de Staff de esa persona sin
+    // pedir nada nuevo al servidor.
+    window.__eligTooltipData[key] = { nombre: p.nombre, tooltip: p.tooltip || { curso: [], futuro: [] }, email: p.email };
     const ratingHtml = p.ratingPromedio != null
       ? ('<span class="stars">' + starsHtml(p.ratingPromedio) + '</span> ' + p.ratingPromedio.toFixed(1) + (p.ratingSource === 'manual' ? ' <span class="no-rating">(dato manual)</span>' : ''))
       : '<span class="no-rating">Sin rating</span>';
-    return '<div class="postu-card c-' + p.color + '">'
+    return '<div class="postu-card c-' + p.color + '" data-postu-key="' + key + '" title="Ver perfil de ' + escapeHtml(p.nombre) + '">'
       + '<span class="postu-dot"></span>'
       + '<div class="postu-info">'
       + '<span class="postu-name" data-elig-tooltip="' + key + '">' + escapeHtml(p.nombre) + '</span>'
@@ -1288,6 +1299,17 @@ function copyStaffEmails(){
 
 function openStaffProfile(email){
   currentStaffEmail = email;
+  // Se puede llamar desde cualquier pestaña (Staff, pero tambien Comisiones
+  // y Diplomaturas al hacer click en una card de postulante) - por eso deja
+  // todo en el estado de "estoy viendo un perfil dentro de Staff", sin
+  // asumir en que pestaña se estaba antes.
+  document.getElementById('tab-comisiones').classList.remove('active');
+  document.getElementById('tab-staff').classList.add('active');
+  document.getElementById('tab-diplomas').classList.remove('active');
+  document.getElementById('tab-certificaciones').classList.remove('active');
+  document.getElementById('pageComisiones').classList.add('hidden');
+  document.getElementById('pageDiplomas').classList.add('hidden');
+  document.getElementById('pageCertificaciones').classList.add('hidden');
   document.getElementById('pageStaff').classList.add('hidden');
   document.getElementById('pageStaffProfile').classList.remove('hidden');
   window.scrollTo(0, 0);
@@ -1978,6 +2000,12 @@ function findDipCohortByCohortId(cohortId){
 }
 
 document.getElementById('dipTbody').addEventListener('click', function(e){
+  const postuCard = e.target.closest('.postu-card[data-postu-key]');
+  if(postuCard){
+    const data = window.__eligTooltipData && window.__eligTooltipData[postuCard.getAttribute('data-postu-key')];
+    if(data && data.email) openStaffProfile(data.email);
+    return;
+  }
   const commTd = e.target.closest('td.commission[data-idx]');
   if(commTd){
     const idx = parseInt(commTd.getAttribute('data-idx'), 10);
