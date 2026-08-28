@@ -22,7 +22,7 @@
 // ============================================================================
 
 const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
-const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason, cursoMatches } = require('../lib/elegibilidad');
+const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason, cursoMatches, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 
 // Cuando ya dicto un curso (aparece en su historial real de comisiones), se
@@ -170,6 +170,16 @@ module.exports = async function handler(req, res) {
       const cohortById = {};
       cohorts.forEach(c => { if (c && c.id) cohortById[c.id] = c; });
 
+      // Duracion real de clase por comision (ver comentario en
+      // lib/elegibilidad.js): reemplaza el supuesto fijo de 2hs. Como el
+      // historial de un perfil incluye comisiones ya finalizadas (sin
+      // "proxima clase"), fetchClassDurationsMs cae solas al fallback mas
+      // pesado (listado completo de clases) para esas.
+      let durationByCohort = {};
+      try {
+        durationByCohort = await fetchClassDurationsMs(cohortIds, env.BASE, env.STUDENT_KEY);
+      } catch (e) { /* si falla, todas caen al fallback de 2hs de mas abajo */ }
+
       const productIds = Array.from(new Set(Object.values(cohortById).map(c => c.productId).filter(Boolean)));
       const productEntries = await Promise.all(productIds.map(async pid => {
         try {
@@ -213,6 +223,7 @@ module.exports = async function handler(req, res) {
         let tipoAsignacion = 'Titular';
         if (a.isReplacement) tipoAsignacion = a.replacementType === 'REEMPLAZO' ? 'Reemplazo' : 'Suplente';
 
+        const durationMs = durationByCohort[c.id] || CLASS_DURATION_MS;
         return {
           cohortId: c.id,
           curso: productTitle[c.productId] || c.name,
@@ -222,7 +233,8 @@ module.exports = async function handler(req, res) {
           fechaFin: endAR ? dateDMY(endAR) : '',
           dia: (c.weekDays || []).slice().sort().map(d => DAYS_MAP[d] || '').join('/'),
           horaInicio: startAR ? timeHM(startAR) : '',
-          horaFin: startAR ? timeHM(new Date(startAR.getTime() + CLASS_DURATION_MS)) : '',
+          horaFin: startAR ? timeHM(new Date(startAR.getTime() + durationMs)) : '',
+          _durationMs: durationMs,
           rol: ROLE_LABEL[a.cohortRole] || a.cohortRole || '',
           tipoAsignacion,
           estadoComision,
@@ -308,7 +320,7 @@ module.exports = async function handler(req, res) {
           startDate: h._startDate,
           endDate: h._endDate,
           startMin,
-          endMin: startMin + 120,
+          endMin: startMin + Math.round((h._durationMs || CLASS_DURATION_MS) / 60000),
           comisionNumber: h.comisionNumber,
           curso: h.curso,
         };
@@ -316,6 +328,11 @@ module.exports = async function handler(req, res) {
 
       if (postulaciones.length) {
         const targets = await Promise.all(postulaciones.map(p => (p.cohortId ? apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts/${p.cohortId}`, env.STUDENT_KEY) : Promise.resolve(null))));
+        const postulacionCohortIds = postulaciones.map(p => p.cohortId).filter(Boolean);
+        let postulacionDurationByCohort = {};
+        try {
+          postulacionDurationByCohort = await fetchClassDurationsMs(postulacionCohortIds, env.BASE, env.STUDENT_KEY);
+        } catch (e) { /* cada una cae al fallback de 2hs de mas abajo */ }
         postulaciones = postulaciones.map((p, i) => {
           // Si la persona no esta habilitada para dictar (en cualquier rol)
           // el curso al que se postulo, la marcamos gris independientemente
@@ -333,12 +350,13 @@ module.exports = async function handler(req, res) {
           const startAR = c.startDate ? new Date(c.startDate) : null;
           const endAR = c.endDate ? new Date(c.endDate) : null;
           const startMin = startAR ? minutesOfDay(startAR) : 0;
+          const targetDurationMs = postulacionDurationByCohort[c.id] || CLASS_DURATION_MS;
           const target = {
             weekDaysSet: new Set(c.weekDays || []),
             startDate: startAR,
             endDate: endAR,
             startMin,
-            endMin: startMin + 120,
+            endMin: startMin + Math.round(targetDurationMs / 60000),
           };
           const overlapCheck = classifyOverlap(target, vigentes.filter(v => v.comisionNumber !== c.commissionNumber));
           const { color, reason } = computeColorReason(overlay.estado || 'aprobado', overlapCheck, ratingPromedio, habilitado);
@@ -347,7 +365,7 @@ module.exports = async function handler(req, res) {
       }
     } catch (e) { /* si falla, mostramos el resto del perfil igual */ }
 
-    historial.forEach(h => { delete h._weekDays; delete h._startDate; delete h._endDate; });
+    historial.forEach(h => { delete h._weekDays; delete h._startDate; delete h._endDate; delete h._durationMs; });
 
     res.status(200).json({
       email,
