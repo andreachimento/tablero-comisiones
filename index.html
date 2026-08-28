@@ -1203,7 +1203,22 @@ function buildStaffCourseFilter(){
   allCourseNames = Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
   sel.innerHTML = '<option value="">Todos los cursos</option>' + allCourseNames.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('');
   sel.value = current;
-  document.getElementById('cursoDatalist').innerHTML = allCourseNames.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">').join('');
+  rebuildCursoDatalist();
+}
+
+// Lista compartida (datalist "cursoDatalist") que usan varios inputs de
+// texto libre para curso en todo el tablero, entre ellos "Habilitar
+// evaluacion sin mail de Coderhouse". Se arma con la union de los cursos
+// que ya tienen a alguien habilitado (allCourseNames) MAS los que ya tienen
+// preguntas de evaluacion cargadas (certCourseNames incluye esos, ver mas
+// arriba) - sin esto, un curso nuevo (con preguntas cargadas pero todavia
+// nadie habilitado) no aparecia como sugerencia, y era facil escribirlo mal
+// a mano (ej. sin la tilde) sin darse cuenta.
+function rebuildCursoDatalist(){
+  const cursos = new Set(allCourseNames || []);
+  (typeof certCourseNames === 'function' ? certCourseNames() : []).forEach(c => cursos.add(c));
+  const list = Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
+  document.getElementById('cursoDatalist').innerHTML = list.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">').join('');
 }
 
 function buildStaffDisponibilidadFilters(){
@@ -2046,6 +2061,7 @@ function loadCertificaciones(){
       certLoadedOnce = true;
       renderCertStats();
       buildCertCourseFilter();
+      rebuildCursoDatalist();
       applyCertFilters();
       renderExcepciones();
     })
