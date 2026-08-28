@@ -2107,6 +2107,23 @@ function renderCertStats(){
 function certCourseNames(){
   const cursos = new Set(allCourseNames || []);
   (CERT_RESP.certificaciones || []).forEach(c => cursos.add(c.curso));
+  // Cursos que ya tienen preguntas cargadas en el banco pero todavia nadie
+  // esta habilitado a dictarlos ni se pidio ninguna certificacion (ej: se
+  // cargo la evaluacion antes de la primera postulacion) - sin esto,
+  // quedaban "invisibles" en el selector de Gestionar preguntas aunque las
+  // preguntas ya existieran guardadas. La clave interna esta siempre en
+  // minuscula (ver preguntasKeyFor), asi que se arma una version con
+  // mayusculas razonable solo para mostrarla - al elegirla, el propio
+  // backend la vuelve a pasar a minuscula para buscarla, asi que no hace
+  // falta que la capitalizacion sea exacta.
+  const yaPresentes = new Set(Array.from(cursos).map(c => c.trim().toLowerCase()));
+  Object.keys(CERT_RESP.preguntas || {}).forEach(key => {
+    const cursoLower = key.split('|')[0];
+    if (!cursoLower || yaPresentes.has(cursoLower)) return;
+    const cursoDisplay = cursoLower.replace(/(^|\s)([a-záéíóúñü])/g, (m, sep, ch) => sep + ch.toUpperCase());
+    cursos.add(cursoDisplay);
+    yaPresentes.add(cursoLower);
+  });
   return Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
 }
 
