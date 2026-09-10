@@ -150,6 +150,7 @@
   .estado-aprobado { background: var(--green-bg); color: var(--green); }
   .estado-desaprobado { background: var(--red-bg); color: var(--red); }
   .estado-futuro { background: var(--amber-bg); color: var(--amber); }
+  .estado-renuncia { background: var(--gris-bg); color: var(--gris); }
   .estado-pendiente { background: var(--amber-bg); color: var(--amber); }
   .estado-postulacion-pendiente { background: var(--amber-bg); color: var(--amber); }
   .estado-postulacion-aprobada { background: var(--green-bg); color: var(--green); }
@@ -180,6 +181,7 @@
   .estado-btn.active-aprobado { background: var(--green); border-color: var(--green); color: white; }
   .estado-btn.active-desaprobado { background: var(--red); border-color: var(--red); color: white; }
   .estado-btn.active-futuro { background: var(--amber); border-color: var(--amber); color: white; }
+  .estado-btn.active-renuncia { background: var(--gris); border-color: var(--gris); color: white; }
 
   .comment-box textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 56px; outline: none; }
   .comment-box textarea:focus { border-color: var(--accent); background: white; }
@@ -430,6 +432,7 @@
       <option value="aprobado">Aprobado</option>
       <option value="desaprobado">Desaprobado</option>
       <option value="futuro">Consideracion futura</option>
+      <option value="renuncia">Renuncia</option>
     </select>
     <select id="fDiaDisponible" onchange="applyStaffFilters()">
       <option value="">Cualquier dia disponible</option>
@@ -1144,7 +1147,7 @@ let staffVisibleRows = [];
 let allCourseNames = [];
 
 const ROLE_LABELS = { profesor: 'Profesor', tutor: 'Tutor Adjunto' };
-const ESTADO_LABELS = { aprobado: 'Aprobado', desaprobado: 'Desaprobado', futuro: 'Consideracion futura' };
+const ESTADO_LABELS = { aprobado: 'Aprobado', desaprobado: 'Desaprobado', futuro: 'Consideracion futura', renuncia: 'Renuncia' };
 // Mismas listas que api/staff-update.js (DIAS_DISPONIBLES / FRANJAS_DISPONIBLES) -
 // si cambian las opciones de la encuesta de disponibilidad, actualizar en los dos lados.
 const DIAS_DISPONIBLES = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
@@ -1474,7 +1477,7 @@ function renderStaffProfile(p){
   }
 
   html += '<div class="card" style="margin:0 26px 18px;"><h3>Estado del perfil</h3><div class="estado-row">'
-    + ['aprobado', 'desaprobado', 'futuro'].map(v => '<button class="estado-btn ' + (p.estado === v ? 'active-' + v : '') + '" onclick="setStaffEstado(\'' + v + '\')">' + ESTADO_LABELS[v] + '</button>').join('')
+    + ['aprobado', 'desaprobado', 'futuro', 'renuncia'].map(v => '<button class="estado-btn ' + (p.estado === v ? 'active-' + v : '') + '" onclick="setStaffEstado(\'' + v + '\')">' + ESTADO_LABELS[v] + '</button>').join('')
     + '</div></div>';
 
   html += '<div class="grid-2" style="margin:0 26px;"><div>';
