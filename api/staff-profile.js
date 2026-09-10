@@ -140,6 +140,7 @@ module.exports = async function handler(req, res) {
     let nombre = '';
     let apellido = '';
     let historial = [];
+    let esNuevo = false;
 
     if (isRealInstructor) {
       const withName = accounts.find(a => a.firstName || a.lastName);
@@ -160,6 +161,13 @@ module.exports = async function handler(req, res) {
       // Comisiones.
       const assignmentsByAccount = await Promise.all(accounts.map(a => fetchAssignmentsForAccount(env, a.id)));
       let assignments = assignmentsByAccount.flat();
+
+      // "Nunca fue asignada a ninguna comision" (ver etiqueta NUEVO en el
+      // listado de Staff): se fija ANTES de descartar las CANCELLED, porque
+      // una asignacion que se le dio de baja igual cuenta como que en algun
+      // momento SI la asignaron - lo mismo que usa staff-list.js para decidir
+      // la etiqueta, para que ambas pantallas coincidan siempre.
+      esNuevo = assignments.length === 0;
 
       // Si se la bajo de una comision (CANCELLED), no debe aparecer mas: eso
       // es justamente lo que Andrea pidio que se reflejara al instante.
@@ -359,7 +367,7 @@ module.exports = async function handler(req, res) {
             endMin: startMin + Math.round(targetDurationMs / 60000),
           };
           const overlapCheck = classifyOverlap(target, vigentes.filter(v => v.comisionNumber !== c.commissionNumber));
-          const { color, reason } = computeColorReason(overlay.estado || 'aprobado', overlapCheck, ratingPromedio, habilitado);
+          const { color, reason } = computeColorReason(overlay.estado || 'aprobado', overlapCheck, ratingPromedio, habilitado, esNuevo);
           return { ...p, rol: rolMostrado, habilitado, color, reason };
         });
       }
@@ -372,6 +380,7 @@ module.exports = async function handler(req, res) {
       nombre,
       apellido,
       esDash: !isRealInstructor,
+      esNuevo,
       cuentas: accounts.length,
       estado: overlay.estado || 'aprobado',
       comentarios: overlay.comentarios || [],
