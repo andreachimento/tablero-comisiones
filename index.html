@@ -28,6 +28,8 @@
     --gris-bg: #eef0f2;
     --pink: #db2777;
     --pink-bg: #fce7f3;
+    --violeta: #7c3aed;
+    --violeta-bg: #f1e9fe;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--ink); font-size: 13px; -webkit-font-smoothing: antialiased; }
@@ -157,6 +159,9 @@
   .estado-postulacion-rechazada { background: var(--red-bg); color: var(--red); }
   .dash-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--line-soft); color: var(--ink-soft); border-radius: 999px; padding: 3px 10px; font-size: 10px; font-weight: 700; }
   .dash-badge::before { content: '\21BB'; font-size: 10px; }
+  .nuevo-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--violeta-bg); color: var(--violeta); border-radius: 999px; padding: 3px 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; }
+  .nuevo-badge::before { content: '\2605'; font-size: 10px; }
+  .filter-checkbox { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); font-weight: 600; cursor: pointer; user-select: none; }
 
   /* --- Perfil de staff --- */
   .profile-header { background: white; border-radius: 12px; border: 1px solid var(--line); padding: 20px 24px; display: flex; align-items: center; gap: 16px; margin: 0 26px 18px; flex-wrap: wrap; }
@@ -269,11 +274,13 @@
   .postu-card.c-naranja { background: var(--amber-bg); border-color: #f2ddaa; }
   .postu-card.c-rojo { background: var(--red-bg); border-color: #f5c6c1; }
   .postu-card.c-gris { background: var(--gris-bg); border-color: #d7dade; }
+  .postu-card.c-violeta { background: var(--violeta-bg); border-color: #ddc7fb; }
   .postu-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
   .c-verde .postu-dot { background: var(--green); }
   .c-naranja .postu-dot { background: var(--amber); }
   .c-rojo .postu-dot { background: var(--red); }
   .c-gris .postu-dot { background: var(--gris); }
+  .c-violeta .postu-dot { background: var(--violeta); }
   .postu-info { flex: 1; min-width: 0; }
   .postu-name { font-weight: 700; font-size: 12.5px; color: var(--ink); cursor: pointer; border-bottom: 1px dotted var(--ink-soft); display: inline-block; }
   .postu-role { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; margin-left: 5px; }
@@ -285,6 +292,7 @@
   .c-naranja .postu-reason { color: var(--amber); }
   .c-rojo .postu-reason { color: var(--red); }
   .c-gris .postu-reason { color: var(--gris); }
+  .c-violeta .postu-reason { color: var(--violeta); }
 
   .elig-tooltip { position: fixed; background: var(--ink); color: white; border-radius: 8px; padding: 10px 12px; font-size: 11px; line-height: 1.5; max-width: 280px; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.28); display: none; }
   .elig-tooltip b { color: #fff; }
@@ -322,21 +330,25 @@
   .hist-item.elig-naranja { border-left: 4px solid var(--amber); }
   .hist-item.elig-rojo { border-left: 4px solid var(--red); }
   .hist-item.elig-gris { border-left: 4px solid var(--gris); }
+  .hist-item.elig-violeta { border-left: 4px solid var(--violeta); }
   .elig-reason { font-size: 10.5px; margin-top: 3px; font-weight: 600; }
   .elig-verde .elig-reason { color: var(--green); }
   .elig-naranja .elig-reason { color: var(--amber); }
   .elig-rojo .elig-reason { color: var(--red); }
   .elig-gris .elig-reason { color: var(--gris); }
+  .elig-violeta .elig-reason { color: var(--violeta); }
   .elig-pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 10px; font-size: 10px; font-weight: 700; }
   .elig-verde .elig-pill { background: var(--green-bg); color: var(--green); }
   .elig-naranja .elig-pill { background: var(--amber-bg); color: var(--amber); }
   .elig-rojo .elig-pill { background: var(--red-bg); color: var(--red); }
   .elig-gris .elig-pill { background: var(--gris-bg); color: var(--gris); }
+  .elig-violeta .elig-pill { background: var(--violeta-bg); color: var(--violeta); }
   .elig-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .elig-verde .elig-dot { background: var(--green); }
   .elig-naranja .elig-dot { background: var(--amber); }
   .elig-rojo .elig-dot { background: var(--red); }
   .elig-gris .elig-dot { background: var(--gris); }
+  .elig-violeta .elig-dot { background: var(--violeta); }
 
   /* --- Certificaciones: tarjeta "Certificaciones pendientes" del perfil --- */
   .cert-pend-item-perfil { border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid; display: flex; gap: 12px; align-items: flex-start; }
@@ -440,6 +452,7 @@
     <select id="fHorarioDisponible" onchange="applyStaffFilters()">
       <option value="">Cualquier horario disponible</option>
     </select>
+    <label class="filter-checkbox"><input type="checkbox" id="fSoloNuevos" onchange="applyStaffFilters()"> Solo nuevos</label>
     <span class="filter-label">Ordenar por</span>
     <select id="fOrden" onchange="applyStaffFilters()">
       <option value="nombre">Nombre (A-Z)</option>
@@ -1243,6 +1256,7 @@ function applyStaffFilters(){
   const estado = document.getElementById('fEstado').value;
   const diaDisponible = document.getElementById('fDiaDisponible').value;
   const horarioDisponible = document.getElementById('fHorarioDisponible').value;
+  const soloNuevos = document.getElementById('fSoloNuevos').checked;
 
   let rows = STAFF.filter(p => {
     if(nombre && !p.nombre.toLowerCase().includes(nombre)) return false;
@@ -1252,6 +1266,7 @@ function applyStaffFilters(){
     if(estado && p.estado !== estado) return false;
     if(diaDisponible && !((p.disponibilidad && p.disponibilidad.dias) || []).includes(diaDisponible)) return false;
     if(horarioDisponible && !((p.disponibilidad && p.disponibilidad.franjas) || []).includes(horarioDisponible)) return false;
+    if(soloNuevos && !p.esNuevo) return false;
     return true;
   });
 
@@ -1282,11 +1297,12 @@ function applyStaffFilters(){
   tbody.innerHTML = rows.map((p, idx) => {
     const roleTags = (p.roles || []).map(r => '<span class="role-tag role-' + r + '">' + (ROLE_LABELS[r] || r) + '</span>').join('');
     const dashBadge = p.source === 'dash' ? ' <span class="dash-badge">Extraido de Dash</span>' : '';
+    const nuevoBadge = p.esNuevo ? ' <span class="nuevo-badge" title="Todavia no fue asignada a su primera comision">Nuevo</span>' : '';
     const ratingCell = p.ratingPromedio != null
       ? ('★ ' + p.ratingPromedio + (p.ratingSource === 'manual' ? ' <span class="no-rating">(manual)</span>' : ''))
       : '<span class="no-rating">Sin datos aun</span>';
     return '<tr data-idx="' + idx + '">'
-      + '<td class="staff-name">' + escapeHtml(p.nombre) + dashBadge + '</td>'
+      + '<td class="staff-name">' + escapeHtml(p.nombre) + nuevoBadge + dashBadge + '</td>'
       + '<td>' + escapeHtml(p.email) + '</td>'
       + '<td>' + (roleTags || '<span class="no-rating">Sin cursos habilitados</span>') + '</td>'
       + '<td><span class="estado-tag estado-' + p.estado + '">' + (ESTADO_LABELS[p.estado] || p.estado) + '</span></td>'
@@ -1455,12 +1471,13 @@ function renderStaffProfile(p){
   const wrap = document.getElementById('staffProfileContent');
   const fullName = (p.nombre + ' ' + p.apellido).trim();
   const dashBadge = p.esDash ? ' <span class="dash-badge">Extraido de Dash</span>' : '';
+  const nuevoBadge = p.esNuevo ? ' <span class="nuevo-badge" title="Todavia no fue asignada a su primera comision">Nuevo</span>' : '';
 
   const cuentasNote = (p.cuentas || 0) > 1 ? ' <span class="cuentas-note">(' + p.cuentas + ' cuentas del back office unificadas)</span>' : '';
 
   let html = '';
   html += '<div class="profile-header"><div class="avatar">' + initials(fullName) + '</div>'
-    + '<div><h1>' + escapeHtml(fullName) + dashBadge + '</h1><div class="mail">' + escapeHtml(p.email) + cuentasNote + '</div></div>';
+    + '<div><h1>' + escapeHtml(fullName) + nuevoBadge + dashBadge + '</h1><div class="mail">' + escapeHtml(p.email) + cuentasNote + '</div></div>';
   if(p.ratingPromedio != null){
     const esManual = p.ratingSource === 'manual';
     const unidad = esManual ? 'comision' : 'encuesta';
@@ -1528,7 +1545,7 @@ function renderStaffProfile(p){
     html += '<div class="postu-scroll">' + postus.map(po => {
       const estado = po.estado || 'pendiente';
       const eligClass = po.color ? ' elig-' + po.color : '';
-      const eligPillLabel = po.color === 'verde' ? 'Puede sumarse' : (po.color === 'naranja' ? 'Con advertencia' : (po.color === 'rojo' ? 'No puede sumar' : (po.color === 'gris' ? 'No habilitado' : '')));
+      const eligPillLabel = po.color === 'verde' ? 'Puede sumarse' : (po.color === 'naranja' ? 'Con advertencia' : (po.color === 'rojo' ? 'No puede sumar' : (po.color === 'gris' ? 'No habilitado' : (po.color === 'violeta' ? 'Todavia sin comision' : ''))));
       const eligPill = po.color ? '<span class="elig-pill"><span class="elig-dot"></span>' + eligPillLabel + '</span>' : '';
       const eligReason = po.reason ? '<span class="elig-reason">&#9679; ' + escapeHtml(po.reason) + '</span>' : '';
       const linkClass = po.cohortId ? ' hist-item-link' : '';
