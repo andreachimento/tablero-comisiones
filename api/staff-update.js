@@ -44,7 +44,7 @@ module.exports = async function handler(req, res) {
 
     switch (action) {
       case 'setEstado': {
-        if (!['aprobado', 'desaprobado', 'futuro'].includes(payload.estado)) {
+        if (!['aprobado', 'desaprobado', 'futuro', 'renuncia'].includes(payload.estado)) {
           res.status(400).json({ error: 'Estado invalido' });
           return;
         }
