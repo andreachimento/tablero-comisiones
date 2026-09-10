@@ -63,7 +63,13 @@ async function fetchAssignmentsForAccount(env, userId) {
 // PostHog (que puede tener respuestas de comisiones ya terminadas).
 async function fetchVigentes(env, accounts, excludeCohortId) {
   const assignmentsByAccount = await Promise.all(accounts.map(a => fetchAssignmentsForAccount(env, a.id)));
-  let assignments = assignmentsByAccount.flat().filter(a => a.status !== 'CANCELLED' && a.cohortId !== excludeCohortId);
+  const rawAssignments = assignmentsByAccount.flat();
+  // "Nunca fue asignada a ninguna comision" (etiqueta NUEVO / color violeta -
+  // ver lib/elegibilidad.js): se mide sobre TODAS las asignaciones, sin
+  // filtrar CANCELLED ni la comision actual, para que coincida exactamente
+  // con el mismo criterio que usan api/staff-list.js y api/staff-profile.js.
+  const tuvoAsignacionAlgunaVez = rawAssignments.length > 0;
+  let assignments = rawAssignments.filter(a => a.status !== 'CANCELLED' && a.cohortId !== excludeCohortId);
   const cohortIds = Array.from(new Set(assignments.map(a => a.cohortId).filter(Boolean)));
   const cohorts = await Promise.all(cohortIds.map(id => apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts/${id}`, env.STUDENT_KEY)));
   const cohortById = {};
@@ -128,7 +134,7 @@ async function fetchVigentes(env, accounts, excludeCohortId) {
       endMin: startMin + Math.round(durationMs / 60000),
     };
   }).filter(Boolean);
-  return { vigentes, allCommissionNumbers };
+  return { vigentes, allCommissionNumbers, tuvoAsignacionAlgunaVez };
 }
 
 module.exports = async function handler(req, res) {
@@ -189,19 +195,21 @@ module.exports = async function handler(req, res) {
 
       let vigentes = [];
       let allCommissionNumbers = [];
+      let esNuevo = false; // si no podemos chequearlo con confianza (cache fria / fallo), no se marca violeta
       let datosIncompletos = !accounts.length; // sin cuentas indexadas todavia -> no podemos chequear superposicion real
       if (accounts.length) {
         try {
           const r = await fetchVigentes(env, accounts, cohortId);
           vigentes = r.vigentes;
           allCommissionNumbers = r.allCommissionNumbers;
+          esNuevo = !r.tuvoAsignacionAlgunaVez;
         } catch (e) {
           datosIncompletos = true;
         }
       }
 
       const cursosHabilitados = (overlay && overlay.cursosHabilitados) || [];
-      return { p, key, estadoOverlay, cursosHabilitados, ratingManualPromedio, ratingManualCount: ratingVals.length, accounts, vigentes, allCommissionNumbers, datosIncompletos };
+      return { p, key, estadoOverlay, cursosHabilitados, ratingManualPromedio, ratingManualCount: ratingVals.length, accounts, vigentes, allCommissionNumbers, esNuevo, datosIncompletos };
     }));
 
     // Un solo pedido a PostHog para el rating real de todos los postulantes
@@ -233,7 +241,7 @@ module.exports = async function handler(req, res) {
       const rolMostrado = d.p.rol || (cursoMatch ? cursoMatch.rol : null);
 
       const overlapCheck = classifyOverlap(target, d.vigentes);
-      const { color, reason: baseReason } = computeColorReason(d.estadoOverlay, overlapCheck, ratingPromedio, habilitado);
+      const { color, reason: baseReason } = computeColorReason(d.estadoOverlay, overlapCheck, ratingPromedio, habilitado, d.esNuevo);
       const reason = d.datosIncompletos && color !== 'rojo' && color !== 'gris' ? (baseReason + ' (no se pudo verificar su agenda completa)') : baseReason;
 
       const enCurso = d.vigentes.filter(a => a.estadoComision === 'en_curso');
@@ -250,6 +258,7 @@ module.exports = async function handler(req, res) {
         ratingCount,
         ratingSource,
         estadoOverlay: d.estadoOverlay,
+        esNuevo: d.esNuevo,
         habilitado,
         color,
         reason,
