@@ -257,6 +257,17 @@ module.exports = async function handler(req, res) {
       if (Object.keys(accountsIndexUpdates).length) await setAccountsIndexBulk(accountsIndexUpdates);
     } catch (e) { /* se reintenta solo en la proxima carga */ }
 
+    // Set de userIds (de CUALQUIER cuenta, cualquier estado de la
+    // asignacion) que aparecen en el escaneo de asignaciones de mas arriba -
+    // sirve para decidir la etiqueta NUEVO: una persona real del back office
+    // sin ningun id en este set nunca fue asignada a ninguna comision
+    // todavia. Si el escaneo fallo (assignmentScanError), no podemos saber
+    // esto con confianza para nadie, asi que directamente no se marca a
+    // nadie como nuevo esa vez (mejor no mostrar la etiqueta que mostrarla
+    // mal), y la pestaña Staff igual sigue funcionando con el resto de los
+    // datos.
+    const assignedUserIdSet = assignmentUserIdsResult instanceof Set ? assignmentUserIdsResult : null;
+
     const staffBase = Object.keys(groups).map(key => {
       const g = groups[key];
       const ov = finalOverlayByKey[key] || defaultOverlay();
@@ -270,12 +281,19 @@ module.exports = async function handler(req, res) {
       if (!nombre) nombre = `${ov.nombre || ''} ${ov.apellido || ''}`.trim();
       if (!nombre) nombre = key.split('@')[0];
 
+      // NUEVO: perfil real del back office (no "extraido de Dash") cuyas
+      // cuentas todavia no aparecen en NINGUNA asignacion - ni siquiera una
+      // ya finalizada o dada de baja. Desaparece solo (no hace falta tocar
+      // nada a mano) apenas Coderhouse le crea su primera asignacion real.
+      const esNuevo = !!(g.accounts.length && assignedUserIdSet && !g.accounts.some(a => assignedUserIdSet.has(a.id)));
+
       return {
         email: key,
         nombre,
         source: g.accounts.length ? 'backoffice' : 'dash',
         cuentas: g.accounts.length, // cantidad de cuentas del back office unificadas en esta fila
         estado: ov.estado || 'aprobado',
+        esNuevo,
         cursosHabilitados: cursos,
         roles,
         disponibilidad: ov.disponibilidad || { dias: [], franjas: [] },
