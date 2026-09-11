@@ -86,16 +86,6 @@ async function handleImportNotionComments(req, res) {
   const offset = Math.max(0, parseInt((req.query && req.query.offset) || '0', 10) || 0);
   const limit = Math.max(1, Math.min(100, parseInt((req.query && req.query.limit) || String(NOTION_IMPORT_BATCH_SIZE_DEFAULT), 10) || NOTION_IMPORT_BATCH_SIZE_DEFAULT));
 
-  // Chequeo EN VIVO (no la foto vieja de seed-staff.json) de que cuentas
-  // reales existen HOY en el back office - condicion de seguridad aprobada
-  // por Andrea: "solo escribir si se encuentra una cuenta real". Si falla,
-  // FALLAMOS CERRADO: no se escribe nada en ningun perfil en esta corrida.
-  const { indexByPersonKey, error: liveError } = await getLiveAccountsIndex();
-  if (liveError) {
-    res.status(200).json({ ok: false, error: 'No se pudo confirmar en vivo ninguna cuenta real, asi que no se escribio nada (por seguridad): ' + liveError });
-    return;
-  }
-
   const allCards = await queryAllPages(notionEnv);
 
   const candidatas = [];
@@ -108,24 +98,47 @@ async function handleImportNotionComments(req, res) {
     candidatas.push({ card, email: det.finalEmail, source: det.source });
   });
 
-  const sinCuentaReal = [];
-  const candidatasConCuenta = [];
-  candidatas.forEach(item => {
-    const key = personKeyLocal(item.email);
-    const accounts = indexByPersonKey.get(key);
-    if (accounts && accounts.length) candidatasConCuenta.push(item);
-    else sinCuentaReal.push({ url: item.card.url, staffTitle: item.card.staffTitle, email: item.email });
-  });
+  // IMPORTANTE (corregido set. 2026, despues de detectar el problema en una
+  // corrida real): el recorte por offset/limit se hace ACA, sobre
+  // `candidatas` - que sale solo de Notion y no cambia de una llamada a la
+  // otra - y NO sobre la lista ya filtrada por cuenta real. Si se recortara
+  // despues de filtrar (como se hacia antes), un bache pasajero en la
+  // consulta en vivo al back office (ver lib/backofficeAccounts.js) cambia
+  // CUANTA gente queda en la lista filtrada, y eso corre el offset para
+  // TODOS los que vienen despues - dos tandas seguidas dejan de "empalmar"
+  // y alguien puede quedar salteado sin que se note. Recortando primero,
+  // el offset siempre apunta a las mismas tarjetas pase lo que pase con el
+  // chequeo en vivo; ese chequeo ahora solo decide, tarjeta por tarjeta
+  // DENTRO de la tanda, si se escribe o no.
+  const slice = candidatas.slice(offset, offset + limit);
 
-  const slice = candidatasConCuenta.slice(offset, offset + limit);
+  // Chequeo EN VIVO (no la foto vieja de seed-staff.json) de que cuentas
+  // reales existen HOY en el back office - condicion de seguridad aprobada
+  // por Andrea: "solo escribir si se encuentra una cuenta real". Si falla,
+  // FALLAMOS CERRADO: no se escribe nada en ningun perfil en esta corrida.
+  const { indexByPersonKey, error: liveError } = await getLiveAccountsIndex();
+  if (liveError) {
+    res.status(200).json({ ok: false, error: 'No se pudo confirmar en vivo ninguna cuenta real, asi que no se escribio nada (por seguridad): ' + liveError });
+    return;
+  }
 
   let nuevosComentarios = 0;
   let tarjetasProcesadas = 0;
+  let confirmadasEnEstaTanda = 0;
+  const sinCuentaRealEnEstaTanda = [];
   const errores = [];
   const nameCache = new Map(); // cache de nombres de Notion, se reusa entre tarjetas de esta tanda
 
   for (const item of slice) {
     try {
+      const liveKey = personKeyLocal(item.email);
+      const accounts = indexByPersonKey.get(liveKey);
+      if (!accounts || !accounts.length) {
+        sinCuentaRealEnEstaTanda.push({ url: item.card.url, staffTitle: item.card.staffTitle, email: item.email });
+        continue;
+      }
+      confirmadasEnEstaTanda++;
+
       const key = personKey(item.email);
       const overlay = await getOverlay(key);
       overlay.comentarios = overlay.comentarios || [];
@@ -178,15 +191,17 @@ async function handleImportNotionComments(req, res) {
   }
 
   const siguienteOffset = offset + slice.length;
-  const done = siguienteOffset >= candidatasConCuenta.length;
+  const done = siguienteOffset >= candidatas.length;
 
   res.status(200).json({
     ok: true,
     totalTarjetas: allCards.length,
     totalCandidatas: candidatas.length,
-    totalConCuentaRealConfirmada: candidatasConCuenta.length,
-    totalSinCuentaReal: sinCuentaReal.length,
-    sinCuentaReal: offset === 0 ? sinCuentaReal : undefined,
+    // Ahora son valores DE ESTA TANDA (offset..offset+limit), no del total
+    // acumulado - ver el comentario mas arriba sobre por que se corrigio.
+    tandaSize: slice.length,
+    confirmadasEnEstaTanda,
+    sinCuentaRealEnEstaTanda: sinCuentaRealEnEstaTanda.length ? sinCuentaRealEnEstaTanda : undefined,
     totalDescartadasSinMail: descartadasSinMail.length,
     totalConflictos: conflictos.length,
     conflictos: offset === 0 ? conflictos : undefined,
