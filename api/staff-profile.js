@@ -21,7 +21,7 @@
 // sin tener que recorrer datos de las 700+ personas del back office.
 // ============================================================================
 
-const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones, worstCategoria } = require('../lib/overlay');
+const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
 const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason, cursoMatches, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 
@@ -367,8 +367,7 @@ module.exports = async function handler(req, res) {
             endMin: startMin + Math.round(targetDurationMs / 60000),
           };
           const overlapCheck = classifyOverlap(target, vigentes.filter(v => v.comisionNumber !== c.commissionNumber));
-          const categoriaComentario = worstCategoria(overlay.comentarios);
-          const { color, reason } = computeColorReason(overlay.estado || 'aprobado', overlapCheck, ratingPromedio, habilitado, esNuevo, categoriaComentario);
+          const { color, reason } = computeColorReason(overlay.estado || 'aprobado', overlapCheck, ratingPromedio, habilitado, esNuevo);
           return { ...p, rol: rolMostrado, habilitado, color, reason };
         });
       }

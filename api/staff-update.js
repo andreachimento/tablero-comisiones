@@ -6,7 +6,7 @@
 // ============================================================================
 
 const crypto = require('crypto');
-const { getOverlay, setOverlay, CATEGORIA_COMENTARIO_VALUES } = require('../lib/overlay');
+const { getOverlay, setOverlay } = require('../lib/overlay');
 // Sincronizacion con el CRM de Relaciones Laborales de Notion (accion
 // 'syncNotionComments' mas abajo). Vive ACA adentro (y no en su propio
 // archivo api/staff-comments-sync.js, como se penso originalmente) para no
@@ -58,7 +58,11 @@ module.exports = async function handler(req, res) {
 
     switch (action) {
       case 'setEstado': {
-        if (!['aprobado', 'desaprobado', 'futuro', 'renuncia'].includes(payload.estado)) {
+        // 5 valores (set. 2026): 'despido' reemplazo a 'desaprobado' (mismo
+        // significado, nombre mas claro) y se sumo 'alerta' ("Asignable con
+        // alerta"), que antes era una categoria aparte por comentario - ver
+        // computeColorReason() en lib/elegibilidad.js.
+        if (!['aprobado', 'despido', 'futuro', 'alerta', 'renuncia'].includes(payload.estado)) {
           res.status(400).json({ error: 'Estado invalido' });
           return;
         }
@@ -98,24 +102,6 @@ module.exports = async function handler(req, res) {
         overlay.comentarios[index].texto = texto;
         overlay.comentarios[index].editado = true;
         overlay.comentarios[index].fechaEdicion = new Date().toISOString();
-        break;
-      }
-      case 'setComentarioCategoria': {
-        // Subcategoria manual (No asignable / Asignable con alerta /
-        // Asignable / sin categorizar) - SIEMPRE la carga una persona a
-        // mano, nunca se asigna sola (ni al importar de Notion ni al
-        // sincronizar comentarios nuevos).
-        const index = Number(payload.index);
-        if (!Number.isInteger(index) || index < 0 || index >= overlay.comentarios.length) {
-          res.status(400).json({ error: 'No se encontro ese comentario' });
-          return;
-        }
-        const categoria = payload.categoria == null || payload.categoria === '' ? null : String(payload.categoria);
-        if (categoria !== null && !CATEGORIA_COMENTARIO_VALUES.includes(categoria)) {
-          res.status(400).json({ error: 'Categoria invalida' });
-          return;
-        }
-        overlay.comentarios[index].categoria = categoria;
         break;
       }
       case 'deleteComentario': {
