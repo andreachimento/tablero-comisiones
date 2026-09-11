@@ -9,7 +9,7 @@
 // nombre.
 // ============================================================================
 
-const { getOverlay, personKey, getAllPostulaciones, getAccountsForPerson } = require('../lib/overlay');
+const { getOverlay, personKey, getAllPostulaciones, getAccountsForPerson, worstCategoria } = require('../lib/overlay');
 const { DAYS_MAP, ROLE_LABEL, CLASS_DURATION_MS, dateDMY, timeHM, minutesOfDay, classifyOverlap, computeColorReason, cursoMatches, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 
@@ -209,7 +209,8 @@ module.exports = async function handler(req, res) {
       }
 
       const cursosHabilitados = (overlay && overlay.cursosHabilitados) || [];
-      return { p, key, estadoOverlay, cursosHabilitados, ratingManualPromedio, ratingManualCount: ratingVals.length, accounts, vigentes, allCommissionNumbers, esNuevo, datosIncompletos };
+      const categoriaComentario = worstCategoria(overlay && overlay.comentarios);
+      return { p, key, estadoOverlay, cursosHabilitados, ratingManualPromedio, ratingManualCount: ratingVals.length, accounts, vigentes, allCommissionNumbers, esNuevo, datosIncompletos, categoriaComentario };
     }));
 
     // Un solo pedido a PostHog para el rating real de todos los postulantes
@@ -241,7 +242,7 @@ module.exports = async function handler(req, res) {
       const rolMostrado = d.p.rol || (cursoMatch ? cursoMatch.rol : null);
 
       const overlapCheck = classifyOverlap(target, d.vigentes);
-      const { color, reason: baseReason } = computeColorReason(d.estadoOverlay, overlapCheck, ratingPromedio, habilitado, d.esNuevo);
+      const { color, reason: baseReason } = computeColorReason(d.estadoOverlay, overlapCheck, ratingPromedio, habilitado, d.esNuevo, d.categoriaComentario);
       const reason = d.datosIncompletos && color !== 'rojo' && color !== 'gris' ? (baseReason + ' (no se pudo verificar su agenda completa)') : baseReason;
 
       const enCurso = d.vigentes.filter(a => a.estadoComision === 'en_curso');

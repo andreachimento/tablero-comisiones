@@ -5,7 +5,7 @@
 // propia del tablero. Todas las acciones devuelven el overlay actualizado.
 // ============================================================================
 
-const { getOverlay, setOverlay } = require('../lib/overlay');
+const { getOverlay, setOverlay, CATEGORIA_COMENTARIO_VALUES } = require('../lib/overlay');
 
 // Valores permitidos para la disponibilidad (dias y franjas horarias que
 // contesta la gente en la encuesta que va a mandar Andrea). Se cargan a
@@ -66,6 +66,7 @@ module.exports = async function handler(req, res) {
           texto,
           autor,
           fecha: new Date().toISOString(),
+          categoria: null,
         });
         break;
       }
@@ -83,6 +84,24 @@ module.exports = async function handler(req, res) {
         overlay.comentarios[index].texto = texto;
         overlay.comentarios[index].editado = true;
         overlay.comentarios[index].fechaEdicion = new Date().toISOString();
+        break;
+      }
+      case 'setComentarioCategoria': {
+        // Subcategoria manual (No asignable / Asignable con alerta /
+        // Asignable / sin categorizar) - SIEMPRE la carga una persona a
+        // mano, nunca se asigna sola (ni al importar de Notion ni al
+        // sincronizar comentarios nuevos).
+        const index = Number(payload.index);
+        if (!Number.isInteger(index) || index < 0 || index >= overlay.comentarios.length) {
+          res.status(400).json({ error: 'No se encontro ese comentario' });
+          return;
+        }
+        const categoria = payload.categoria == null || payload.categoria === '' ? null : String(payload.categoria);
+        if (categoria !== null && !CATEGORIA_COMENTARIO_VALUES.includes(categoria)) {
+          res.status(400).json({ error: 'Categoria invalida' });
+          return;
+        }
+        overlay.comentarios[index].categoria = categoria;
         break;
       }
       case 'deleteComentario': {
