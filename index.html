@@ -1801,11 +1801,11 @@ function syncStaffComentarios(silent){
   const email = currentStaffEmail;
   if(!email) return;
   if(btn && !silent){ btn.disabled = true; btn.textContent = 'Actualizando...'; }
-  fetch('/api/staff-comments-sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email }),
-  }).then(r => r.json()).then(resp => {
+  // Nota: esta accion vive dentro de /api/staff-update (accion
+  // 'syncNotionComments'), no en un endpoint propio - asi no se suma una
+  // funcion serverless mas al proyecto (el plan de Vercel de este proyecto
+  // tiene un tope de 12).
+  postStaffUpdate('syncNotionComments', {}).then(resp => {
     const btnNow = document.getElementById('btnSyncComentarios');
     if(btnNow){ btnNow.disabled = false; btnNow.textContent = '↻ Actualizar comentarios'; }
     if(currentStaffEmail !== email) return; // se cambio de perfil mientras sincronizaba

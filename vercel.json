@@ -13,7 +13,10 @@
       "maxDuration": 20
     },
     "api/staff-update.js": {
-      "maxDuration": 10
+      "maxDuration": 30
+    },
+    "api/admin-seed-staff.js": {
+      "maxDuration": 60
     },
     "api/comision-postulantes.js": {
       "maxDuration": 30
@@ -28,12 +31,6 @@
       "maxDuration": 60
     },
     "api/disponibilidad-sync.js": {
-      "maxDuration": 30
-    },
-    "api/admin-import-notion-comments.js": {
-      "maxDuration": 60
-    },
-    "api/staff-comments-sync.js": {
       "maxDuration": 30
     }
   },
