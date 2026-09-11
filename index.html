@@ -201,6 +201,24 @@
   .comment-action { font-size: 11px; color: var(--accent); cursor: pointer; font-weight: 600; }
   .comment-action:hover { text-decoration: underline; }
   .comment-edit-textarea { width: 100%; border: 1px solid var(--accent); background: white; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 50px; outline: none; }
+  .comment-text-clamped { max-height: 4.6em; overflow: hidden; position: relative; }
+  .comment-text-clamped::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1.6em; background: linear-gradient(to bottom, rgba(255,255,255,0), var(--card-bg, #fff)); }
+  .comment-expand-toggle { display: inline-block; margin-top: 4px; }
+  .auto-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--violeta-bg); color: var(--violeta); border-radius: 999px; padding: 2px 9px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; }
+  .auto-badge::before { content: '\26A1'; font-size: 9px; }
+  .notion-src-link { font-size: 10.5px; color: var(--ink-soft); text-decoration: none; font-weight: 600; }
+  .notion-src-link:hover { text-decoration: underline; }
+  .categoria-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .categoria-row label { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; white-space: nowrap; }
+  .categoria-select { border: 1.5px solid var(--line); background: white; border-radius: 999px; padding: 3px 10px; font-size: 10.5px; font-weight: 700; font-family: inherit; cursor: pointer; color: var(--ink-soft); }
+  .categoria-select.cat-no_asignable { border-color: var(--red); background: var(--red-bg); color: var(--red); }
+  .categoria-select.cat-asignable_alerta { border-color: var(--amber); background: var(--amber-bg); color: var(--amber); }
+  .categoria-select.cat-asignable { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+  .comments-card-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .btn-sync-comentarios { background: white; border: 1.5px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; }
+  .btn-sync-comentarios:hover { background: var(--accent); color: white; }
+  .btn-sync-comentarios:disabled { opacity: .6; cursor: default; }
+  .sync-note { font-size: 10.5px; color: var(--ink-soft); font-style: italic; margin: 6px 0 0; }
 
   .add-course-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
   .add-course-row input[type=text], .add-course-row select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 7px 10px; font-size: 12px; font-family: inherit; }
@@ -1348,10 +1366,12 @@ function openStaffProfile(email){
   document.getElementById('pageStaffProfile').classList.remove('hidden');
   window.scrollTo(0, 0);
   loadStaffProfile(email);
+  startStaffProfileAutoSync();
 }
 
 function closeStaffProfile(){
   currentStaffEmail = null;
+  stopStaffProfileAutoSync();
   document.getElementById('pageStaffProfile').classList.add('hidden');
   document.getElementById('pageStaff').classList.remove('hidden');
   loadStaffList();
@@ -1499,7 +1519,10 @@ function renderStaffProfile(p){
 
   html += '<div class="grid-2" style="margin:0 26px;"><div>';
 
-  html += '<div class="card"><h3>Comentarios</h3><div class="comment-box">'
+  html += '<div class="card"><div class="comments-card-header"><h3 style="margin:0;">Comentarios</h3>'
+    + '<button id="btnSyncComentarios" class="btn-sync-comentarios" onclick="syncStaffComentarios(false)" title="Buscar comentarios nuevos cargados en el CRM de Relaciones Laborales (Notion) para esta persona">&#8635; Actualizar comentarios</button></div>'
+    + '<p class="sync-note">Trae automaticamente lo nuevo cargado en el CRM de Relaciones Laborales (Notion) cada 5 minutos mientras este perfil este abierto, ademas de poder pedirlo a mano con el boton.</p>'
+    + '<div class="comment-box">'
     + '<div class="autor-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
     + '<label for="selComentarioAutor" style="font-size:11.5px;font-weight:700;color:var(--ink-soft);white-space:nowrap;">Tu nombre:</label>'
     + '<select id="selComentarioAutor" style="flex:1;max-width:240px;">'
@@ -1508,10 +1531,25 @@ function renderStaffProfile(p){
     + '</select></div>'
     + '<textarea id="newComentario" placeholder="Escribir un comentario sobre esta persona..."></textarea>'
     + '<button class="btn-add" onclick="addStaffComentario()">+ Agregar comentario</button></div><div style="margin-top:14px;">';
-  html += (p.comentarios || []).map((c, i) => '<div class="comment-item" data-idx="' + i + '"><div class="comment-meta">' + escapeHtml(c.autor || '') + ' &middot; ' + formatFechaCorta(c.fecha) + (c.editado ? ' <span class="comment-edited">(editado)</span>' : '') + '</div>'
-    + '<div class="comment-text" id="commentText' + i + '">' + escapeHtml(c.texto) + '</div>'
-    + '<div class="comment-actions"><span class="comment-action" onclick="editStaffComentario(' + i + ')">Editar</span><span class="comment-action" onclick="deleteStaffComentario(' + i + ')">Eliminar</span></div>'
-    + '</div>').join('')
+  html += (p.comentarios || []).map((c, i) => {
+    const isAuto = !!c.origenNotion;
+    const autorHtml = isAuto
+      ? '<span class="auto-badge" title="Cargado automaticamente desde el CRM de Relaciones Laborales de Notion, no lo escribio una persona">Automático</span>'
+      : escapeHtml(c.autor || '');
+    const notionLink = isAuto && c.notionUrl ? ' <a href="' + escapeHtml(c.notionUrl) + '" target="_blank" rel="noopener" class="notion-src-link">Ver tarjeta original en Notion &rarr;</a>' : '';
+    const texto = c.texto || '';
+    const isLong = texto.length > 320;
+    const cat = c.categoria || '';
+    const catOptions = [['', 'Sin categorizar'], ['no_asignable', 'No asignable'], ['asignable_alerta', 'Asignable con alerta'], ['asignable', 'Asignable']]
+      .map(([val, label]) => '<option value="' + val + '"' + (cat === val ? ' selected' : '') + '>' + label + '</option>').join('');
+    return '<div class="comment-item" data-idx="' + i + '"><div class="comment-meta">' + autorHtml + ' &middot; ' + formatFechaCorta(c.fecha) + (c.editado ? ' <span class="comment-edited">(editado)</span>' : '') + notionLink + '</div>'
+      + '<div class="comment-text' + (isLong ? ' comment-text-clamped' : '') + '" id="commentText' + i + '">' + escapeHtml(texto) + '</div>'
+      + (isLong ? '<span class="comment-action comment-expand-toggle" onclick="toggleCommentExpand(' + i + ', this)">Ver completo</span>' : '')
+      + '<div class="categoria-row"><label for="catSel' + i + '">Categoria (a cargo del equipo):</label>'
+      + '<select id="catSel' + i + '" class="categoria-select cat-' + (cat || 'none') + '" onchange="setStaffComentarioCategoria(' + i + ', this.value, this)">' + catOptions + '</select></div>'
+      + '<div class="comment-actions"><span class="comment-action" onclick="editStaffComentario(' + i + ')">Editar</span><span class="comment-action" onclick="deleteStaffComentario(' + i + ')">Eliminar</span></div>'
+      + '</div>';
+  }).join('')
     || '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no hay comentarios.</p>';
   html += '</div></div>';
 
@@ -1672,6 +1710,7 @@ function editStaffComentario(i){
   if(!c) return;
   const div = document.getElementById('commentText' + i);
   if(!div) return;
+  div.classList.remove('comment-text-clamped');
   div.innerHTML = '<textarea class="comment-edit-textarea" id="editComentarioTa' + i + '">' + escapeHtml(c.texto) + '</textarea>'
     + '<div style="margin-top:6px;display:flex;gap:12px;">'
     + '<span class="comment-action" onclick="saveStaffComentario(' + i + ')">Guardar</span>'
@@ -1706,6 +1745,88 @@ function confirmDeleteStaffComentario(i){
   postStaffUpdate('deleteComentario', { index: i }).then(resp => {
     if(resp && resp.ok){ showToast('Comentario eliminado.', 2000); loadStaffProfile(currentStaffEmail); }
     else showToast('No se pudo eliminar el comentario: ' + ((resp && resp.error) || ''), 4000);
+  });
+}
+
+function toggleCommentExpand(i, el){
+  const div = document.getElementById('commentText' + i);
+  if(!div) return;
+  const nowClamped = div.classList.toggle('comment-text-clamped');
+  el.textContent = nowClamped ? 'Ver completo' : 'Ver menos';
+}
+
+// Subcategoria manual (No asignable / Asignable con alerta / Asignable /
+// sin categorizar) de UN comentario puntual. Nunca se asigna sola: la carga
+// siempre una persona del equipo a mano, tanto en comentarios propios como
+// en los importados automaticamente de Notion. Se suma como parametro
+// adicional a las reglas de color existentes (estado, superposicion,
+// rating) - ver lib/elegibilidad.js.
+function setStaffComentarioCategoria(i, categoria, selEl){
+  if(selEl) selEl.className = 'categoria-select cat-' + (categoria || 'none');
+  postStaffUpdate('setComentarioCategoria', { index: i, categoria: categoria || null }).then(resp => {
+    if(resp && resp.ok){
+      showToast('Categoria del comentario actualizada.', 2000);
+      // Recargamos el perfil (no solo el select) porque esto puede cambiar
+      // el color de sus postulaciones/eligibilidad, calculado en el servidor.
+      loadStaffProfile(currentStaffEmail);
+    } else {
+      showToast('No se pudo actualizar la categoria: ' + ((resp && resp.error) || ''), 4000);
+      loadStaffProfile(currentStaffEmail);
+    }
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Sincronizacion de comentarios con el CRM de Relaciones Laborales (Notion):
+// boton dedicado "Actualizar comentarios" DENTRO del perfil (separado del
+// boton general "Actualizar datos" de la pestaña Comisiones, a pedido de
+// Andrea), + un refresco automatico propio cada 5 minutos mientras el
+// perfil este abierto (misma cadencia que el auto-refresh general, pero
+// corriendo aparte).
+// ----------------------------------------------------------------------------
+let staffProfileSyncTimer = null;
+const STAFF_PROFILE_SYNC_MS = 5 * 60 * 1000;
+
+function startStaffProfileAutoSync(){
+  stopStaffProfileAutoSync();
+  staffProfileSyncTimer = setInterval(() => syncStaffComentarios(true), STAFF_PROFILE_SYNC_MS);
+}
+
+function stopStaffProfileAutoSync(){
+  if(staffProfileSyncTimer){ clearInterval(staffProfileSyncTimer); staffProfileSyncTimer = null; }
+}
+
+function syncStaffComentarios(silent){
+  const btn = document.getElementById('btnSyncComentarios');
+  const email = currentStaffEmail;
+  if(!email) return;
+  if(btn && !silent){ btn.disabled = true; btn.textContent = 'Actualizando...'; }
+  fetch('/api/staff-comments-sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email }),
+  }).then(r => r.json()).then(resp => {
+    const btnNow = document.getElementById('btnSyncComentarios');
+    if(btnNow){ btnNow.disabled = false; btnNow.textContent = '↻ Actualizar comentarios'; }
+    if(currentStaffEmail !== email) return; // se cambio de perfil mientras sincronizaba
+    if(!resp || resp.error){
+      if(!silent) showToast('No se pudo sincronizar con Notion: ' + ((resp && resp.error) || 'error'), 4000);
+      return;
+    }
+    if(resp.configurado === false){
+      if(!silent) showToast(resp.mensaje || 'La sincronizacion con Notion todavia no esta configurada.', 4500);
+      return;
+    }
+    if(resp.nuevosComentarios){
+      showToast(resp.nuevosComentarios + ' comentario' + (resp.nuevosComentarios === 1 ? '' : 's') + ' nuevo' + (resp.nuevosComentarios === 1 ? '' : 's') + ' desde Notion.', 3500);
+      loadStaffProfile(email);
+    } else if(!silent){
+      showToast('Sin novedades en Notion.', 2000);
+    }
+  }).catch(err => {
+    const btnNow = document.getElementById('btnSyncComentarios');
+    if(btnNow){ btnNow.disabled = false; btnNow.textContent = '↻ Actualizar comentarios'; }
+    if(!silent) showToast('No se pudo sincronizar con Notion: ' + err.message, 4000);
   });
 }
 

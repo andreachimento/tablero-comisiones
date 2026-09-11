@@ -29,6 +29,12 @@
     },
     "api/disponibilidad-sync.js": {
       "maxDuration": 30
+    },
+    "api/admin-import-notion-comments.js": {
+      "maxDuration": 60
+    },
+    "api/staff-comments-sync.js": {
+      "maxDuration": 30
     }
   },
   "crons": [
