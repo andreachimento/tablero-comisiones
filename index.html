@@ -204,6 +204,8 @@
   .comment-text-clamped { max-height: 4.6em; overflow: hidden; position: relative; }
   .comment-text-clamped::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1.6em; background: linear-gradient(to bottom, rgba(255,255,255,0), var(--card-bg, #fff)); }
   .comment-expand-toggle { display: inline-block; margin-top: 4px; }
+  .comment-text-linkable { cursor: pointer; border-radius: 6px; margin: -4px -6px; padding: 4px 6px; transition: background .12s; }
+  .comment-text-linkable:hover { background: var(--line-soft); }
   .auto-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--violeta-bg); color: var(--violeta); border-radius: 999px; padding: 2px 9px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; }
   .auto-badge::before { content: '\26A1'; font-size: 9px; }
   .notion-src-link { font-size: 10.5px; color: var(--ink-soft); text-decoration: none; font-weight: 600; }
@@ -1542,8 +1544,14 @@ function renderStaffProfile(p){
     const cat = c.categoria || '';
     const catOptions = [['', 'Sin categorizar'], ['no_asignable', 'No asignable'], ['asignable_alerta', 'Asignable con alerta'], ['asignable', 'Asignable']]
       .map(([val, label]) => '<option value="' + val + '"' + (cat === val ? ' selected' : '') + '>' + label + '</option>').join('');
+    // Los comentarios importados de Notion se pueden clickear directo (no
+    // solo el link chico de arriba) para abrir la tarjeta original - pedido
+    // de Andrea.
+    const clickToNotion = isAuto && c.notionUrl
+      ? ' comment-text-linkable" onclick="openNotionCard(\'' + encodeURIComponent(c.notionUrl) + '\')" title="Ver tarjeta original en Notion'
+      : '';
     return '<div class="comment-item" data-idx="' + i + '"><div class="comment-meta">' + autorHtml + ' &middot; ' + formatFechaCorta(c.fecha) + (c.editado ? ' <span class="comment-edited">(editado)</span>' : '') + notionLink + '</div>'
-      + '<div class="comment-text' + (isLong ? ' comment-text-clamped' : '') + '" id="commentText' + i + '">' + escapeHtml(texto) + '</div>'
+      + '<div class="comment-text' + (isLong ? ' comment-text-clamped' : '') + clickToNotion + '" id="commentText' + i + '">' + escapeHtml(texto) + '</div>'
       + (isLong ? '<span class="comment-action comment-expand-toggle" onclick="toggleCommentExpand(' + i + ', this)">Ver completo</span>' : '')
       + '<div class="categoria-row"><label for="catSel' + i + '">Categoria (a cargo del equipo):</label>'
       + '<select id="catSel' + i + '" class="categoria-select cat-' + (cat || 'none') + '" onchange="setStaffComentarioCategoria(' + i + ', this.value, this)">' + catOptions + '</select></div>'
@@ -1746,6 +1754,11 @@ function confirmDeleteStaffComentario(i){
     if(resp && resp.ok){ showToast('Comentario eliminado.', 2000); loadStaffProfile(currentStaffEmail); }
     else showToast('No se pudo eliminar el comentario: ' + ((resp && resp.error) || ''), 4000);
   });
+}
+
+function openNotionCard(urlEnc){
+  const url = decodeURIComponent(urlEnc || '');
+  if(url) window.open(url, '_blank', 'noopener');
 }
 
 function toggleCommentExpand(i, el){
