@@ -24,12 +24,15 @@ const { getRedis } = require('../lib/redis');
 const seed = require('../data/seed-staff.json');
 const {
   getEnv: getNotionEnv, queryAllPages, detectEmail, getAllBlocks, splitDatedEntries,
-  buildSummaryComment, bestDate, personKeyLocal,
+  buildSummaryComment, bestDate, personKeyLocal, getCommentEntries,
 } = require('../lib/notionSync');
 const { getLiveAccountsIndex } = require('../lib/backofficeAccounts');
+const { getAllCertificaciones, getAllPreguntas, getAllExcepciones } = require('../lib/certificaciones');
+const { resolveCurso } = require('../lib/cursosCanonicos');
 
 const NOTION_IMPORT_SECRET = 'coderhouse-notion-import-2026';
 const NOTION_IMPORT_BATCH_SIZE_DEFAULT = 30;
+const CURSOS_AUDIT_SECRET = 'coderhouse-cursos-audit-2026';
 
 function stableNotionId(pageUrl, fecha, texto) {
   return crypto.createHash('sha1').update(String(pageUrl) + '|' + String(fecha || '') + '|' + String(texto).slice(0, 200)).digest('hex').slice(0, 16);
@@ -119,6 +122,7 @@ async function handleImportNotionComments(req, res) {
   let nuevosComentarios = 0;
   let tarjetasProcesadas = 0;
   const errores = [];
+  const nameCache = new Map(); // cache de nombres de Notion, se reusa entre tarjetas de esta tanda
 
   for (const item of slice) {
     try {
@@ -137,6 +141,12 @@ async function handleImportNotionComments(req, res) {
         const { entries } = splitDatedEntries(blocks);
         entries.forEach(e => candidateEntries.push({ fecha: e.fecha || bestDate(item.card), texto: e.texto }));
       }
+
+      // Comentarios NATIVOS de Notion (panel de charla, no el cuerpo) - ver
+      // getCommentEntries() en lib/notionSync.js. Si la integracion no tiene
+      // el permiso habilitado, o falla, esto devuelve vacio y seguimos igual.
+      const commentEntries = await getCommentEntries(item.card.pageId, notionEnv, nameCache);
+      commentEntries.forEach(e => candidateEntries.push({ fecha: e.fecha || bestDate(item.card), texto: e.texto }));
 
       let added = 0;
       candidateEntries.forEach(entry => {
@@ -277,10 +287,120 @@ async function handleSeedStaff(req, res) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// job=cursos-audit - PASO 1 de la unificacion de nombres de curso pedida por
+// Andrea (set. 2026): "quiero que queden solo el nombre de los 60 cursos que
+// hay activos". Este job NO ESCRIBE NADA, solo lee y reporta.
+//
+// Escanea las 4 partes de la base propia del tablero donde se guarda un
+// nombre de curso como texto libre:
+//   - cursosHabilitados de cada perfil (staff:overlay)
+//   - certificaciones (staff:certificaciones, campo "curso")
+//   - banco de preguntas (staff:cert-preguntas, la clave es "curso|rol")
+//   - excepciones de certificacion (staff:cert-excepciones, campo "curso")
+//
+// Para cada texto de curso distinto que encuentra, usa resolveCurso() (ver
+// lib/cursosCanonicos.js) para ver si:
+//   - ya es (o solo le sobraba "Flex"/tildes/espacios) uno de los 60 nombres
+//     oficiales -> "yaCanonico"
+//   - matchea una equivalencia que Andrea ya confirmo (ej. "Business
+//     Analytics" -> "Analisis de Datos para Negocios") -> "alias"
+//   - no hay match seguro -> "sinMapear": Andrea tiene que decirnos a cual de
+//     los 60 corresponde (o si hay que agregarlo como un 61vo, o descartarlo).
+// Nunca asigna un mapeo por similitud/adivinado.
+// ----------------------------------------------------------------------------
+function auditarTextosDeCurso(pares) {
+  // pares: [{ texto, fuente }] (fuente solo para poder decir "aparece en
+  // cursosHabilitados y tambien en certificaciones", etc.)
+  const porTexto = new Map(); // texto -> { texto, apariciones, fuentes:Set, canonico, origen }
+  pares.forEach(({ texto, fuente }) => {
+    const t = String(texto || '').trim();
+    if (!t) return;
+    if (!porTexto.has(t)) {
+      const r = resolveCurso(t);
+      porTexto.set(t, { texto: t, apariciones: 0, fuentes: new Set(), canonico: r.canonico, origen: r.origen });
+    }
+    const entry = porTexto.get(t);
+    entry.apariciones++;
+    entry.fuentes.add(fuente);
+  });
+  const todos = Array.from(porTexto.values()).map(e => ({ ...e, fuentes: Array.from(e.fuentes) }));
+  todos.sort((a, b) => b.apariciones - a.apariciones);
+  const sinMapear = todos.filter(e => !e.canonico);
+  const yaCanonico = todos.filter(e => e.origen === 'ya_canonico');
+  const porAlias = todos.filter(e => e.origen === 'alias');
+  return { distintos: todos, sinMapear, yaCanonico, porAlias };
+}
+
+async function handleCursosAudit(req, res) {
+  if ((req.query && req.query.key) !== CURSOS_AUDIT_SECRET) {
+    res.status(403).json({ error: 'Falta la clave (?key=...)' });
+    return;
+  }
+  try {
+    const overlays = await getAllOverlays();
+    const paresHabilitados = [];
+    let perfilesConCursos = 0;
+    let entradasHabilitadas = 0;
+    Object.values(overlays).forEach(ov => {
+      const lista = (ov && ov.cursosHabilitados) || [];
+      if (lista.length) perfilesConCursos++;
+      lista.forEach(c => {
+        entradasHabilitadas++;
+        paresHabilitados.push({ texto: c.curso, fuente: 'cursosHabilitados' });
+      });
+    });
+
+    const certs = await getAllCertificaciones();
+    const paresCert = certs.map(c => ({ texto: c.curso, fuente: 'certificaciones' }));
+
+    const preguntas = await getAllPreguntas();
+    const paresPreguntas = Object.keys(preguntas).map(clave => ({
+      texto: clave.split('|')[0],
+      fuente: 'cert-preguntas',
+    }));
+
+    const excepciones = await getAllExcepciones();
+    const paresExcep = excepciones.map(e => ({ texto: e.curso, fuente: 'cert-excepciones' }));
+
+    const todosLosPares = [...paresHabilitados, ...paresCert, ...paresPreguntas, ...paresExcep];
+    const auditoriaGeneral = auditarTextosDeCurso(todosLosPares);
+
+    res.status(200).json({
+      ok: true,
+      resumen: {
+        perfilesEscaneados: Object.keys(overlays).length,
+        perfilesConCursosHabilitados: perfilesConCursos,
+        entradasCursosHabilitados: entradasHabilitadas,
+        registrosCertificaciones: certs.length,
+        clavesPreguntas: Object.keys(preguntas).length,
+        registrosExcepciones: excepciones.length,
+        textosDistintosEncontrados: auditoriaGeneral.distintos.length,
+        yaCanonicos: auditoriaGeneral.yaCanonico.length,
+        porAlias: auditoriaGeneral.porAlias.length,
+        sinMapear: auditoriaGeneral.sinMapear.length,
+      },
+      // Lo mas importante para Andrea: los textos que NO se pudieron mapear
+      // solos a ninguno de los 60 nombres oficiales ni a una equivalencia ya
+      // confirmada. Para cada uno, en cuantos lugares aparece y de donde.
+      sinMapear: auditoriaGeneral.sinMapear,
+      // Para poder revisar tambien los que SI se van a mapear, por si alguno
+      // esta mal (ej. un alias que no correspondia).
+      porAlias: auditoriaGeneral.porAlias,
+    });
+  } catch (err) {
+    res.status(200).json({ error: String(err && err.message ? err.message : err) });
+  }
+}
+
 module.exports = async function handler(req, res) {
   const job = (req.query && req.query.job) || 'seed-staff';
   if (job === 'import-notion-comments') {
     await handleImportNotionComments(req, res);
+    return;
+  }
+  if (job === 'cursos-audit') {
+    await handleCursosAudit(req, res);
     return;
   }
   await handleSeedStaff(req, res);

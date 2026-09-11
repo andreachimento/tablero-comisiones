@@ -14,7 +14,7 @@ const { getOverlay, setOverlay, CATEGORIA_COMENTARIO_VALUES } = require('../lib/
 // tiene un tope de 12 funciones por deploy, y ya estaba al limite.
 const {
   getEnv: getNotionEnv, queryAllPages, detectEmail, getAllBlocks, splitDatedEntries,
-  buildSummaryComment, bestDate, personKeyLocal,
+  buildSummaryComment, bestDate, personKeyLocal, getCommentEntries,
 } = require('../lib/notionSync');
 
 function stableNotionId(pageUrl, fecha, texto) {
@@ -185,6 +185,7 @@ module.exports = async function handler(req, res) {
         });
 
         const existingIds = new Set(overlay.comentarios.map(c => c.notionEntryId).filter(Boolean));
+        const nameCache = new Map();
         let added = 0;
         for (const card of matching) {
           const candidateEntries = [];
@@ -197,6 +198,11 @@ module.exports = async function handler(req, res) {
             const { entries } = splitDatedEntries(blocks);
             entries.forEach(e => candidateEntries.push({ fecha: e.fecha || bestDate(card), texto: e.texto }));
           }
+
+          // Comentarios NATIVOS de Notion (panel de charla, no el cuerpo) -
+          // ver getCommentEntries() en lib/notionSync.js.
+          const commentEntries = await getCommentEntries(card.pageId, notionEnv, nameCache);
+          commentEntries.forEach(e => candidateEntries.push({ fecha: e.fecha || bestDate(card), texto: e.texto }));
 
           candidateEntries.forEach(entry => {
             if (!entry.texto || !entry.texto.trim()) return;
