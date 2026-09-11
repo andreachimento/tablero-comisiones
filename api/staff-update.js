@@ -5,7 +5,21 @@
 // propia del tablero. Todas las acciones devuelven el overlay actualizado.
 // ============================================================================
 
+const crypto = require('crypto');
 const { getOverlay, setOverlay, CATEGORIA_COMENTARIO_VALUES } = require('../lib/overlay');
+// Sincronizacion con el CRM de Relaciones Laborales de Notion (accion
+// 'syncNotionComments' mas abajo). Vive ACA adentro (y no en su propio
+// archivo api/staff-comments-sync.js, como se penso originalmente) para no
+// sumar una funcion serverless mas: el plan Hobby de Vercel de este proyecto
+// tiene un tope de 12 funciones por deploy, y ya estaba al limite.
+const {
+  getEnv: getNotionEnv, queryAllPages, detectEmail, getAllBlocks, splitDatedEntries,
+  buildSummaryComment, bestDate, personKeyLocal,
+} = require('../lib/notionSync');
+
+function stableNotionId(pageUrl, fecha, texto) {
+  return crypto.createHash('sha1').update(String(pageUrl) + '|' + String(fecha || '') + '|' + String(texto).slice(0, 200)).digest('hex').slice(0, 16);
+}
 
 // Valores permitidos para la disponibilidad (dias y franjas horarias que
 // contesta la gente en la encuesta que va a mandar Andrea). Se cargan a
@@ -145,6 +159,69 @@ module.exports = async function handler(req, res) {
         const franjas = Array.isArray(payload.franjas) ? payload.franjas.filter(f => FRANJAS_DISPONIBLES.includes(f)) : [];
         overlay.disponibilidad = { dias, franjas };
         break;
+      }
+      case 'syncNotionComments': {
+        // Busca en Notion todas las tarjetas cuyo mail (Perfil Dash o
+        // titulo) pertenezca a esta misma persona (mismo mail base, sin
+        // importar el +tag), y agrega como comentarios nuevos ("Automático",
+        // sin categorizar) cualquier entrada que todavia no se hubiera
+        // importado - tanto de la migracion inicial como de un sync
+        // anterior. Nunca duplica (cada entrada tiene un id estable) y
+        // nunca toca comentarios ya existentes. Se llama desde el boton
+        // "Actualizar comentarios" del perfil, y desde el auto-refresh cada
+        // 5 minutos mientras el perfil este abierto - ver index.html.
+        const notionEnv = getNotionEnv();
+        if (!notionEnv) {
+          res.status(200).json({ ok: false, configurado: false, mensaje: 'La sincronización con Notion todavía no está configurada (falta NOTION_API_KEY en Vercel).' });
+          return;
+        }
+        const targetKey = personKeyLocal(email);
+        const allCards = await queryAllPages(notionEnv);
+        const matching = [];
+        allCards.forEach(card => {
+          const det = detectEmail(card);
+          if (!det.finalEmail || det.conflict) return; // igual criterio que la migracion masiva
+          if (personKeyLocal(det.finalEmail) === targetKey) matching.push(card);
+        });
+
+        const existingIds = new Set(overlay.comentarios.map(c => c.notionEntryId).filter(Boolean));
+        let added = 0;
+        for (const card of matching) {
+          const candidateEntries = [];
+          const summaryText = buildSummaryComment(card);
+          if (summaryText) candidateEntries.push({ fecha: bestDate(card), texto: summaryText });
+
+          let blocks = [];
+          try { blocks = await getAllBlocks(card.pageId, notionEnv); } catch (e) { /* seguimos solo con el resumen */ }
+          if (blocks.length) {
+            const { entries } = splitDatedEntries(blocks);
+            entries.forEach(e => candidateEntries.push({ fecha: e.fecha || bestDate(card), texto: e.texto }));
+          }
+
+          candidateEntries.forEach(entry => {
+            if (!entry.texto || !entry.texto.trim()) return;
+            const id = stableNotionId(card.url, entry.fecha, entry.texto);
+            if (existingIds.has(id)) return;
+            existingIds.add(id);
+            overlay.comentarios.push({
+              texto: entry.texto,
+              autor: 'Automático',
+              fecha: entry.fecha ? (entry.fecha + 'T00:00:00.000Z') : new Date().toISOString(),
+              categoria: null,
+              origenNotion: true,
+              notionUrl: card.url,
+              notionEntryId: id,
+            });
+            added++;
+          });
+        }
+
+        if (added) {
+          overlay.comentarios.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+          await setOverlay(email, overlay);
+        }
+        res.status(200).json({ ok: true, configurado: true, nuevosComentarios: added, tarjetasEncontradas: matching.length, comentarios: overlay.comentarios });
+        return;
       }
       case 'setNombreDash': {
         // Solo tiene sentido para perfiles "extraidos de Dash" (sin cuenta
