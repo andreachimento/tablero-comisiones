@@ -150,8 +150,9 @@
   .role-tutor { background: var(--pink-bg); color: var(--pink); }
   .estado-tag { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 10.5px; font-weight: 700; }
   .estado-aprobado { background: var(--green-bg); color: var(--green); }
-  .estado-desaprobado { background: var(--red-bg); color: var(--red); }
+  .estado-despido, .estado-desaprobado { background: var(--red-bg); color: var(--red); }
   .estado-futuro { background: var(--amber-bg); color: var(--amber); }
+  .estado-alerta { background: var(--amber-bg); color: var(--amber); }
   .estado-renuncia { background: var(--gris-bg); color: var(--gris); }
   .estado-pendiente { background: var(--amber-bg); color: var(--amber); }
   .estado-postulacion-pendiente { background: var(--amber-bg); color: var(--amber); }
@@ -184,9 +185,10 @@
   .estado-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .estado-btn { border: 1px solid var(--line); background: white; border-radius: 8px; padding: 8px 14px; font-size: 12px; cursor: pointer; font-weight: 700; color: var(--ink-soft); }
   .estado-btn.active-aprobado { background: var(--green); border-color: var(--green); color: white; }
-  .estado-btn.active-desaprobado { background: var(--red); border-color: var(--red); color: white; }
-  .estado-btn.active-futuro { background: var(--amber); border-color: var(--amber); color: white; }
-  .estado-btn.active-renuncia { background: var(--gris); border-color: var(--gris); color: white; }
+  .estado-btn.active-despido, .estado-btn.active-desaprobado { background: var(--red); border-color: var(--red); color: white; }
+  .estado-btn.active-futuro { background: var(--red); border-color: var(--red); color: white; }
+  .estado-btn.active-alerta { background: var(--amber); border-color: var(--amber); color: white; }
+  .estado-btn.active-renuncia { background: var(--red); border-color: var(--red); color: white; }
 
   .comment-box textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 56px; outline: none; }
   .comment-box textarea:focus { border-color: var(--accent); background: white; }
@@ -210,13 +212,12 @@
   .auto-badge::before { content: '\26A1'; font-size: 9px; }
   .notion-src-link { font-size: 10.5px; color: var(--ink-soft); text-decoration: none; font-weight: 600; }
   .notion-src-link:hover { text-decoration: underline; }
-  .categoria-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
-  .categoria-row label { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; white-space: nowrap; }
-  .categoria-select { border: 1.5px solid var(--line); background: white; border-radius: 999px; padding: 3px 10px; font-size: 10.5px; font-weight: 700; font-family: inherit; cursor: pointer; color: var(--ink-soft); }
-  .categoria-select.cat-no_asignable { border-color: var(--red); background: var(--red-bg); color: var(--red); }
-  .categoria-select.cat-asignable_alerta { border-color: var(--amber); background: var(--amber-bg); color: var(--amber); }
-  .categoria-select.cat-asignable { border-color: var(--green); background: var(--green-bg); color: var(--green); }
   .comments-card-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  /* Se ven ~2 comentarios y el resto se scrollea (pedido de Andrea, set.
+     2026, para no alargar tanto el perfil) - siempre mas reciente primero. */
+  .comments-scroll { max-height: 190px; overflow-y: auto; padding-right: 4px; }
+  .comments-scroll::-webkit-scrollbar { width: 7px; }
+  .comments-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; }
   .btn-sync-comentarios { background: white; border: 1.5px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 6px 14px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; }
   .btn-sync-comentarios:hover { background: var(--accent); color: white; }
   .btn-sync-comentarios:disabled { opacity: .6; cursor: default; }
@@ -229,6 +230,13 @@
   .habilitado-item .curso-nombre { font-weight: 600; }
   .curso-rol-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); margin: 14px 0 2px; }
   .curso-rol-label:first-child { margin-top: 0; }
+  /* Cursos habilitados a dictar, como burbujas en vez de filas (pedido de
+     Andrea, set. 2026, para ocupar menos espacio) - solo en el perfil, no
+     en las excepciones de certificaciones (que siguen usando .habilitado-item). */
+  .bubble-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 4px; }
+  .curso-bubble { display: inline-flex; align-items: center; gap: 6px; background: var(--line-soft); border: 1px solid var(--line); color: var(--ink); font-size: 12px; font-weight: 600; padding: 5px 8px 5px 12px; border-radius: 999px; }
+  .curso-bubble .remove-x { color: var(--ink-soft); font-size: 12px; padding: 2px; }
+  .curso-bubble .remove-x:hover { color: var(--red); }
   .cuentas-note { font-size: 11px; color: var(--ink-soft); font-style: italic; }
   .remove-x { color: var(--red); cursor: pointer; font-size: 13px; padding: 2px 6px; }
   .disp-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); margin: 12px 0 6px; }
@@ -462,8 +470,9 @@
     <select id="fEstado" onchange="applyStaffFilters()">
       <option value="">Todos los estados</option>
       <option value="aprobado">Aprobado</option>
-      <option value="desaprobado">Desaprobado</option>
+      <option value="despido">Despido</option>
       <option value="futuro">Consideracion futura</option>
+      <option value="alerta">Asignable con alerta</option>
       <option value="renuncia">Renuncia</option>
     </select>
     <select id="fDiaDisponible" onchange="applyStaffFilters()">
@@ -1180,7 +1189,7 @@ let staffVisibleRows = [];
 let allCourseNames = [];
 
 const ROLE_LABELS = { profesor: 'Profesor', tutor: 'Tutor Adjunto' };
-const ESTADO_LABELS = { aprobado: 'Aprobado', desaprobado: 'Desaprobado', futuro: 'Consideracion futura', renuncia: 'Renuncia' };
+const ESTADO_LABELS = { aprobado: 'Aprobado', despido: 'Despido', desaprobado: 'Despido', futuro: 'Consideracion futura', alerta: 'Asignable con alerta', renuncia: 'Renuncia' };
 // Mismas listas que api/staff-update.js (DIAS_DISPONIBLES / FRANJAS_DISPONIBLES) -
 // si cambian las opciones de la encuesta de disponibilidad, actualizar en los dos lados.
 const DIAS_DISPONIBLES = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
@@ -1283,7 +1292,7 @@ function applyStaffFilters(){
     if(mail && !p.email.toLowerCase().includes(mail)) return false;
     if(rol && !(p.roles || []).includes(rol)) return false;
     if(curso && !(p.cursosHabilitados || []).some(c => c.curso === curso)) return false;
-    if(estado && p.estado !== estado) return false;
+    if(estado && p.estado !== estado && !(estado === 'despido' && p.estado === 'desaprobado')) return false;
     if(diaDisponible && !((p.disponibilidad && p.disponibilidad.dias) || []).includes(diaDisponible)) return false;
     if(horarioDisponible && !((p.disponibilidad && p.disponibilidad.franjas) || []).includes(horarioDisponible)) return false;
     if(soloNuevos && !p.esNuevo) return false;
@@ -1516,7 +1525,13 @@ function renderStaffProfile(p){
   }
 
   html += '<div class="card" style="margin:0 26px 18px;"><h3>Estado del perfil</h3><div class="estado-row">'
-    + ['aprobado', 'desaprobado', 'futuro', 'renuncia'].map(v => '<button class="estado-btn ' + (p.estado === v ? 'active-' + v : '') + '" onclick="setStaffEstado(\'' + v + '\')">' + ESTADO_LABELS[v] + '</button>').join('')
+    + ['aprobado', 'despido', 'futuro', 'alerta', 'renuncia'].map(v => {
+      // 'desaprobado' es el valor viejo (antes de set. 2026) de lo que hoy
+      // se llama 'despido' - un perfil ya guardado con ese valor tiene que
+      // seguir mostrando el boton "Despido" resaltado.
+      const activo = p.estado === v || (v === 'despido' && p.estado === 'desaprobado');
+      return '<button class="estado-btn ' + (activo ? 'active-' + v : '') + '" onclick="setStaffEstado(\'' + v + '\')">' + ESTADO_LABELS[v] + '</button>';
+    }).join('')
     + '</div></div>';
 
   html += '<div class="grid-2" style="margin:0 26px;"><div>';
@@ -1532,7 +1547,12 @@ function renderStaffProfile(p){
     + COMENTARIO_AUTORES.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join('')
     + '</select></div>'
     + '<textarea id="newComentario" placeholder="Escribir un comentario sobre esta persona..."></textarea>'
-    + '<button class="btn-add" onclick="addStaffComentario()">+ Agregar comentario</button></div><div style="margin-top:14px;">';
+    + '<button class="btn-add" onclick="addStaffComentario()">+ Agregar comentario</button></div><div class="comments-scroll" style="margin-top:14px;">';
+  // Se muestran todos, pero el contenedor solo deja ver ~2 y el resto se
+  // scrollea (pedido de Andrea, set. 2026) - ya vienen ordenados del mas
+  // reciente al mas antiguo. La categorizacion por comentario se saco del
+  // todo: ese criterio ahora se carga en el Estado del perfil de arriba
+  // (ver el nuevo valor "Asignable con alerta").
   html += (p.comentarios || []).map((c, i) => {
     const isAuto = !!c.origenNotion;
     const autorHtml = isAuto
@@ -1541,9 +1561,6 @@ function renderStaffProfile(p){
     const notionLink = isAuto && c.notionUrl ? ' <a href="' + escapeHtml(c.notionUrl) + '" target="_blank" rel="noopener" class="notion-src-link">Ver tarjeta original en Notion &rarr;</a>' : '';
     const texto = c.texto || '';
     const isLong = texto.length > 320;
-    const cat = c.categoria || '';
-    const catOptions = [['', 'Sin categorizar'], ['no_asignable', 'No asignable'], ['asignable_alerta', 'Asignable con alerta'], ['asignable', 'Asignable']]
-      .map(([val, label]) => '<option value="' + val + '"' + (cat === val ? ' selected' : '') + '>' + label + '</option>').join('');
     // Los comentarios importados de Notion se pueden clickear directo (no
     // solo el link chico de arriba) para abrir la tarjeta original - pedido
     // de Andrea.
@@ -1553,8 +1570,6 @@ function renderStaffProfile(p){
     return '<div class="comment-item" data-idx="' + i + '"><div class="comment-meta">' + autorHtml + ' &middot; ' + formatFechaCorta(c.fecha) + (c.editado ? ' <span class="comment-edited">(editado)</span>' : '') + notionLink + '</div>'
       + '<div class="comment-text' + (isLong ? ' comment-text-clamped' : '') + clickToNotion + '" id="commentText' + i + '">' + escapeHtml(texto) + '</div>'
       + (isLong ? '<span class="comment-action comment-expand-toggle" onclick="toggleCommentExpand(' + i + ', this)">Ver completo</span>' : '')
-      + '<div class="categoria-row"><label for="catSel' + i + '">Categoria (a cargo del equipo):</label>'
-      + '<select id="catSel' + i + '" class="categoria-select cat-' + (cat || 'none') + '" onchange="setStaffComentarioCategoria(' + i + ', this.value, this)">' + catOptions + '</select></div>'
       + '<div class="comment-actions"><span class="comment-action" onclick="editStaffComentario(' + i + ')">Editar</span><span class="comment-action" onclick="deleteStaffComentario(' + i + ')">Eliminar</span></div>'
       + '</div>';
   }).join('')
@@ -1568,16 +1583,19 @@ function renderStaffProfile(p){
     + '<button class="btn-add" style="margin-top:0;" onclick="addStaffCurso()">+ Agregar</button>'
     + '</div><div>';
   const cursos = p.cursosHabilitados || [];
+  // Dos secciones (Profesor / TA), cada curso como una burbuja chica en vez
+  // de una fila - pedido de Andrea, set. 2026, para ocupar menos espacio.
+  const CURSO_SECTION_LABEL = { profesor: 'Profesor', tutor: 'TA' };
   if (!cursos.length) {
     html += '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no tiene cursos habilitados.</p>';
   } else {
     ['profesor', 'tutor'].forEach(rol => {
       const items = cursos.filter(c => c.rol === rol);
       if (!items.length) return;
-      html += '<div class="curso-rol-label">Como ' + (ROLE_LABELS[rol] || rol) + '</div>';
-      html += items.map(c => '<div class="habilitado-item"><span class="curso-nombre">' + escapeHtml(c.curso) + '</span>'
-        + '<span><span class="role-tag role-' + c.rol + '">' + (ROLE_LABELS[c.rol] || c.rol) + '</span>'
-        + '<span class="remove-x" onclick="removeStaffCurso(\'' + encodeURIComponent(c.curso) + '\',\'' + c.rol + '\')">&#10005;</span></span></div>').join('');
+      html += '<div class="curso-rol-label">' + (CURSO_SECTION_LABEL[rol] || rol) + '</div><div class="bubble-row">'
+        + items.map(c => '<span class="curso-bubble">' + escapeHtml(c.curso)
+          + '<span class="remove-x" onclick="removeStaffCurso(\'' + encodeURIComponent(c.curso) + '\',\'' + c.rol + '\')">&#10005;</span></span>').join('')
+        + '</div>';
     });
   }
   html += '</div></div>';
@@ -1766,27 +1784,6 @@ function toggleCommentExpand(i, el){
   if(!div) return;
   const nowClamped = div.classList.toggle('comment-text-clamped');
   el.textContent = nowClamped ? 'Ver completo' : 'Ver menos';
-}
-
-// Subcategoria manual (No asignable / Asignable con alerta / Asignable /
-// sin categorizar) de UN comentario puntual. Nunca se asigna sola: la carga
-// siempre una persona del equipo a mano, tanto en comentarios propios como
-// en los importados automaticamente de Notion. Se suma como parametro
-// adicional a las reglas de color existentes (estado, superposicion,
-// rating) - ver lib/elegibilidad.js.
-function setStaffComentarioCategoria(i, categoria, selEl){
-  if(selEl) selEl.className = 'categoria-select cat-' + (categoria || 'none');
-  postStaffUpdate('setComentarioCategoria', { index: i, categoria: categoria || null }).then(resp => {
-    if(resp && resp.ok){
-      showToast('Categoria del comentario actualizada.', 2000);
-      // Recargamos el perfil (no solo el select) porque esto puede cambiar
-      // el color de sus postulaciones/eligibilidad, calculado en el servidor.
-      loadStaffProfile(currentStaffEmail);
-    } else {
-      showToast('No se pudo actualizar la categoria: ' + ((resp && resp.error) || ''), 4000);
-      loadStaffProfile(currentStaffEmail);
-    }
-  });
 }
 
 // ----------------------------------------------------------------------------
