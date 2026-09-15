@@ -27,8 +27,11 @@ const {
   buildSummaryComment, bestDate, personKeyLocal, getCommentEntries,
 } = require('../lib/notionSync');
 const { getLiveAccountsIndex } = require('../lib/backofficeAccounts');
-const { getAllCertificaciones, getAllPreguntas, getAllExcepciones } = require('../lib/certificaciones');
-const { resolveCurso } = require('../lib/cursosCanonicos');
+const {
+  CERT_KEY, PREGUNTAS_KEY, EXCEPCIONES_KEY,
+  getAllCertificaciones, getAllPreguntas, getAllExcepciones,
+} = require('../lib/certificaciones');
+const { resolveCurso, esDescartable } = require('../lib/cursosCanonicos');
 
 const NOTION_IMPORT_SECRET = 'coderhouse-notion-import-2026';
 const NOTION_IMPORT_BATCH_SIZE_DEFAULT = 30;
@@ -408,6 +411,197 @@ async function handleCursosAudit(req, res) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// job=cursos-unificar - PASO 2 (el que escribe) de la unificacion de cursos.
+// Usa el mapeo ya cerrado con Andrea en lib/cursosCanonicos.js (ALIAS_CURSO +
+// DESCARTAR_CURSO) para:
+//   - cursosHabilitados de cada perfil: renombra al nombre canonico, borra
+//     los que estan en DESCARTAR_CURSO, y fusiona (sin duplicar) si dos
+//     entradas del mismo perfil+rol quedan iguales despues de renombrar.
+//   - certificaciones (campo "curso"): renombra.
+//   - banco de preguntas (clave "curso|rol"): mueve la clave al nombre
+//     canonico, fusionando las preguntas sin duplicar (se compara pregunta
+//     por pregunta) si el destino ya tenia preguntas cargadas.
+//   - excepciones (campo "curso"): renombra.
+// Los textos que Andrea pidio dejar afuera (sin alias en cursosCanonicos.js)
+// NO se tocan - resolveCurso() los deja en null y este job los ignora.
+//
+// Por seguridad, por defecto es DRY-RUN (no escribe nada, solo devuelve el
+// detalle de que cambiaria). Para aplicar de verdad hay que agregar
+// &apply=1 a la misma URL, DESPUES de revisar el dry-run con Andrea.
+//   /api/admin-seed-staff?job=cursos-unificar&key=coderhouse-cursos-audit-2026
+//   /api/admin-seed-staff?job=cursos-unificar&key=coderhouse-cursos-audit-2026&apply=1
+// ----------------------------------------------------------------------------
+async function handleCursosUnificar(req, res) {
+  if ((req.query && req.query.key) !== CURSOS_AUDIT_SECRET) {
+    res.status(403).json({ error: 'Falta la clave (?key=...)' });
+    return;
+  }
+  const apply = !!(req.query && (req.query.apply === '1' || req.query.apply === 'true'));
+
+  try {
+    // 1) cursosHabilitados de cada perfil ------------------------------------
+    const overlays = await getAllOverlays();
+    const overlayUpdates = {}; // email -> overlay ya modificado (solo los que cambian)
+    const perfilesConCambios = [];
+    let entradasRenombradas = 0;
+    let entradasBorradas = 0;
+    let entradasFusionadas = 0;
+
+    Object.keys(overlays).forEach(email => {
+      const ov = overlays[email];
+      const lista = (ov && ov.cursosHabilitados) || [];
+      if (!lista.length) return;
+
+      const nuevaLista = [];
+      const seen = new Set();
+      const detalle = [];
+      let cambio = false;
+
+      lista.forEach(c => {
+        const cursoOriginal = c.curso;
+        if (esDescartable(cursoOriginal)) {
+          entradasBorradas++;
+          cambio = true;
+          detalle.push({ accion: 'borrar', curso: cursoOriginal, rol: c.rol });
+          return;
+        }
+        const r = resolveCurso(cursoOriginal);
+        const cursoFinal = r.canonico || cursoOriginal;
+        if (r.canonico && cursoFinal !== cursoOriginal) {
+          entradasRenombradas++;
+          cambio = true;
+          detalle.push({ accion: 'renombrar', antes: cursoOriginal, despues: cursoFinal, rol: c.rol });
+        }
+        const dupKey = cursoFinal.toLowerCase() + '|' + c.rol;
+        if (seen.has(dupKey)) {
+          entradasFusionadas++;
+          cambio = true;
+          detalle.push({ accion: 'fusionar (quedaba duplicado)', curso: cursoFinal, rol: c.rol });
+          return;
+        }
+        seen.add(dupKey);
+        nuevaLista.push(cursoFinal === cursoOriginal ? c : { ...c, curso: cursoFinal });
+      });
+
+      if (cambio) {
+        perfilesConCambios.push({ email, cambios: detalle });
+        overlayUpdates[email] = { ...ov, cursosHabilitados: nuevaLista };
+      }
+    });
+
+    // 2) certificaciones (campo "curso") -------------------------------------
+    const certs = await getAllCertificaciones();
+    const certChanges = [];
+    certs.forEach(c => {
+      const r = resolveCurso(c.curso);
+      if (r.canonico && r.canonico !== c.curso) {
+        certChanges.push({ id: c.id, antes: c.curso, despues: r.canonico, registro: c });
+      }
+    });
+
+    // 3) banco de preguntas (clave "curso|rol") ------------------------------
+    const preguntas = await getAllPreguntas();
+    const preguntasFinal = {};
+    Object.keys(preguntas).forEach(k => { preguntasFinal[k] = preguntas[k].slice(); });
+    const preguntasChanges = [];
+    const preguntasKeysABorrar = new Set();
+
+    Object.keys(preguntas).forEach(k => {
+      const sep = k.indexOf('|');
+      const cursoParte = sep === -1 ? k : k.slice(0, sep);
+      const rolParte = sep === -1 ? '' : k.slice(sep + 1);
+      const r = resolveCurso(cursoParte);
+      if (!r.canonico) return;
+      const nuevaClave = r.canonico.trim().toLowerCase() + '|' + rolParte;
+      if (nuevaClave === k) return;
+
+      const origenLista = preguntas[k] || [];
+      const yaTeniaDestino = Object.prototype.hasOwnProperty.call(preguntas, nuevaClave);
+      const destinoLista = preguntasFinal[nuevaClave] || [];
+      const destinoFirmas = new Set(destinoLista.map(p => JSON.stringify(p)));
+      let agregadas = 0;
+      origenLista.forEach(p => {
+        const firma = JSON.stringify(p);
+        if (!destinoFirmas.has(firma)) { destinoLista.push(p); destinoFirmas.add(firma); agregadas++; }
+      });
+      preguntasFinal[nuevaClave] = destinoLista;
+      preguntasKeysABorrar.add(k);
+      preguntasChanges.push({
+        antes: k,
+        despues: nuevaClave,
+        preguntasEnOrigen: origenLista.length,
+        preguntasNuevasSumadas: agregadas,
+        fusionoConPreguntasExistentes: yaTeniaDestino,
+      });
+    });
+    preguntasKeysABorrar.forEach(k => { delete preguntasFinal[k]; });
+
+    // 4) excepciones (campo "curso") -----------------------------------------
+    const excepciones = await getAllExcepciones();
+    const excepcionesChanges = [];
+    excepciones.forEach(e => {
+      const r = resolveCurso(e.curso);
+      if (r.canonico && r.canonico !== e.curso) {
+        excepcionesChanges.push({ id: e.id, antes: e.curso, despues: r.canonico, registro: e });
+      }
+    });
+
+    const resumen = {
+      perfilesConCambios: perfilesConCambios.length,
+      entradasRenombradas,
+      entradasBorradas,
+      entradasFusionadas,
+      certificacionesAModificar: certChanges.length,
+      clavesPreguntasAModificar: preguntasChanges.length,
+      excepcionesAModificar: excepcionesChanges.length,
+    };
+
+    if (!apply) {
+      res.status(200).json({
+        ok: true,
+        modo: 'dry-run',
+        mensaje: 'No se escribio nada todavia. Si esto se ve bien, volve a visitar esta misma URL agregando &apply=1 al final para aplicar los cambios de verdad.',
+        resumen,
+        perfilesConCambios,
+        certChanges: certChanges.map(({ id, antes, despues }) => ({ id, antes, despues })),
+        preguntasChanges,
+        excepcionesChanges: excepcionesChanges.map(({ id, antes, despues }) => ({ id, antes, despues })),
+      });
+      return;
+    }
+
+    // ---- A partir de aca se escribe de verdad ----
+    const redis = getRedis();
+    const BATCH = 200;
+
+    const overlayEntries = Object.entries(overlayUpdates);
+    for (let i = 0; i < overlayEntries.length; i += BATCH) {
+      const chunk = Object.fromEntries(overlayEntries.slice(i, i + BATCH).map(([email, ov]) => [email, JSON.stringify(ov)]));
+      await redis.hset(OVERLAY_KEY, chunk);
+    }
+
+    for (const cc of certChanges) {
+      await redis.hset(CERT_KEY, { [cc.id]: JSON.stringify({ ...cc.registro, curso: cc.despues }) });
+    }
+
+    if (preguntasKeysABorrar.size) {
+      await redis.hdel(PREGUNTAS_KEY, ...Array.from(preguntasKeysABorrar));
+    }
+    for (const pc of preguntasChanges) {
+      await redis.hset(PREGUNTAS_KEY, { [pc.despues]: JSON.stringify(preguntasFinal[pc.despues]) });
+    }
+
+    for (const ec of excepcionesChanges) {
+      await redis.hset(EXCEPCIONES_KEY, { [ec.id]: JSON.stringify({ ...ec.registro, curso: ec.despues }) });
+    }
+
+    res.status(200).json({ ok: true, modo: 'aplicado', resumen });
+  } catch (err) {
+    res.status(200).json({ error: String(err && err.message ? err.message : err) });
+  }
+}
+
 module.exports = async function handler(req, res) {
   const job = (req.query && req.query.job) || 'seed-staff';
   if (job === 'import-notion-comments') {
@@ -416,6 +610,10 @@ module.exports = async function handler(req, res) {
   }
   if (job === 'cursos-audit') {
     await handleCursosAudit(req, res);
+    return;
+  }
+  if (job === 'cursos-unificar') {
+    await handleCursosUnificar(req, res);
     return;
   }
   await handleSeedStaff(req, res);
