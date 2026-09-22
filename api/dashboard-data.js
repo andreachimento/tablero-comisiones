@@ -22,7 +22,7 @@ const MONTHS_AHEAD = 4;
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
 const TZ = 'America/Argentina/Buenos_Aires';
 
-const { CLASS_DURATION_MS, fetchClassDurationsMs } = require('../lib/elegibilidad');
+const { CLASS_DURATION_MS, fetchClassDurationsMs, esProfesor, esTutor } = require('../lib/elegibilidad');
 
 function getEnv() {
   const BASE = process.env.BACKOFFICE_API_URL;
@@ -249,8 +249,11 @@ async function buildRows() {
     const horaFin = startAR ? timeHM(new Date(startAR.getTime() + durationMs)) : '';
 
     const staffList = byCohort[c.id] || [];
-    const profs = staffList.filter(s => s.cohortRole === 'INSTRUCTOR' || s.cohortRole === 'PROFESOR');
-    const tutors = staffList.filter(s => s.cohortRole === 'TUTOR');
+    // Ver esProfesor/esTutor en lib/elegibilidad.js: el criterio es por
+    // descarte, para no perder a la gente cuya asignacion quedo sin
+    // cohortRole cargado en el back office.
+    const profs = staffList.filter(esProfesor);
+    const tutors = staffList.filter(esTutor);
     const profNames = profs.map(s => users[s.userId] || String(s.userId).substring(0, 8));
 
     return {
