@@ -12,7 +12,7 @@
 // fetch('/api/dashboard-data-diplomas') y recibe el JSON con las diplomaturas.
 // ============================================================================
 
-const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM, fetchClassDurationsMs } = require('../lib/elegibilidad');
+const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM, fetchClassDurationsMs, esProfesor } = require('../lib/elegibilidad');
 const { getAllPostulaciones } = require('../lib/overlay');
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -172,7 +172,10 @@ async function buildRows() {
         const startAR = ca.startDate ? new Date(ca.startDate) : null;
         const endAR = ca.endDate ? new Date(ca.endDate) : null;
         const staffList = assignmentsByCohort[ca.cohortId] || [];
-        const profs = staffList.filter(s => s.cohortRole === 'INSTRUCTOR' || s.cohortRole === 'PROFESOR');
+        // Mismo criterio que el tablero de Comisiones (ver esProfesor en
+        // lib/elegibilidad.js): por descarte, para no perder a la gente cuya
+        // asignacion quedo sin cohortRole cargado en el back office.
+        const profs = staffList.filter(esProfesor);
         const profNames = profs.map(s => users[s.userId] || String(s.userId).substring(0, 8));
         const postulantesCohort = postulantesCountByCohort[ca.cohortId] || 0;
         postulantesTotal += postulantesCohort;
