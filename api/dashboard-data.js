@@ -22,7 +22,7 @@ const MONTHS_AHEAD = 4;
 const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7: 'Dom' };
 const TZ = 'America/Argentina/Buenos_Aires';
 
-const { CLASS_DURATION_MS, fetchClassDurationsMs, esProfesor, esTutor } = require('../lib/elegibilidad');
+const { CLASS_DURATION_MS, fetchClassDurationsMs, clasificarAsignacion } = require('../lib/elegibilidad');
 
 function getEnv() {
   const BASE = process.env.BACKOFFICE_API_URL;
@@ -162,20 +162,23 @@ async function fetchProducts(productIds, env) {
   return Object.fromEntries(entries);
 }
 
+// Devuelve { userId: { name, email } }. El mail hace falta ademas del nombre
+// porque es lo que permite saber si una asignacion sin cohortRole cargado es
+// de profesor o de tutor (ver clasificarAsignacion en lib/elegibilidad.js).
 async function fetchUsers(userIds, env) {
   const entries = await Promise.all(userIds.map(async uid => {
     try {
       const d = await apiGet(env.BASE, `/platform/user/m2m/admin/users/${uid}`, env.STUDENT_KEY);
       const fn = (d.firstName || '').trim();
       const ln = (d.lastName || '').trim();
+      const email = d.email || '';
       let name = `${fn} ${ln}`.trim();
       if (!name) {
-        const email = d.email || '';
         name = email ? email.split('@')[0] : uid;
       }
-      return [uid, name];
+      return [uid, { name: name, email: email }];
     } catch (e) {
-      return [uid, String(uid).substring(0, 8)];
+      return [uid, { name: String(uid).substring(0, 8), email: '' }];
     }
   }));
   return Object.fromEntries(entries);
@@ -240,6 +243,13 @@ async function buildRows() {
     durationByCohort = await fetchClassDurationsMs(cohorts.map(c => c.id), env.BASE, env.STUDENT_KEY);
   } catch (e) { /* si falla, todas caen al fallback de 2hs de mas abajo */ }
 
+  // Atajos para leer nombre y mail de la persona de una asignacion. Si el
+  // usuario no se pudo traer del back office, cae al id recortado (igual que
+  // antes) y el mail queda vacio, con lo cual clasificarAsignacion la trata
+  // como profesor.
+  const nombreDe = s => (users[s.userId] && users[s.userId].name) || String(s.userId).substring(0, 8);
+  const emailDe = s => (users[s.userId] && users[s.userId].email) || '';
+
   const rows = cohorts.map(c => {
     const course = products[c.productId] || c.name;
     const startAR = c.startDate ? new Date(c.startDate) : null;
@@ -249,12 +259,12 @@ async function buildRows() {
     const horaFin = startAR ? timeHM(new Date(startAR.getTime() + durationMs)) : '';
 
     const staffList = byCohort[c.id] || [];
-    // Ver esProfesor/esTutor en lib/elegibilidad.js: el criterio es por
-    // descarte, para no perder a la gente cuya asignacion quedo sin
-    // cohortRole cargado en el back office.
-    const profs = staffList.filter(esProfesor);
-    const tutors = staffList.filter(esTutor);
-    const profNames = profs.map(s => users[s.userId] || String(s.userId).substring(0, 8));
+    // Ver clasificarAsignacion en lib/elegibilidad.js: si el back office no
+    // mando el cohortRole, el rol se deduce del +tag del mail de la cuenta,
+    // para no perder a nadie del tablero ni contar un tutor como profesor.
+    const profs = staffList.filter(s => clasificarAsignacion(s, emailDe(s)) === 'PROFESOR');
+    const tutors = staffList.filter(s => clasificarAsignacion(s, emailDe(s)) === 'TUTOR');
+    const profNames = profs.map(s => nombreDe(s));
 
     return {
       cohortId: c.id,
