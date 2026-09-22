@@ -12,7 +12,7 @@
 // fetch('/api/dashboard-data-diplomas') y recibe el JSON con las diplomaturas.
 // ============================================================================
 
-const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM, fetchClassDurationsMs, esProfesor } = require('../lib/elegibilidad');
+const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM, fetchClassDurationsMs, clasificarAsignacion } = require('../lib/elegibilidad');
 const { getAllPostulaciones } = require('../lib/overlay');
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -98,14 +98,14 @@ async function fetchUsers(userIds, env) {
       const d = await apiGet(env.BASE, `/platform/user/m2m/admin/users/${uid}`, env.STUDENT_KEY);
       const fn = (d && d.firstName || '').trim();
       const ln = (d && d.lastName || '').trim();
+      const email = (d && d.email) || '';
       let name = `${fn} ${ln}`.trim();
       if (!name) {
-        const email = (d && d.email) || '';
         name = email ? email.split('@')[0] : uid;
       }
-      return [uid, name];
+      return [uid, { name: name, email: email }];
     } catch (e) {
-      return [uid, String(uid).substring(0, 8)];
+      return [uid, { name: String(uid).substring(0, 8), email: '' }];
     }
   }));
   return Object.fromEntries(entries);
@@ -172,11 +172,11 @@ async function buildRows() {
         const startAR = ca.startDate ? new Date(ca.startDate) : null;
         const endAR = ca.endDate ? new Date(ca.endDate) : null;
         const staffList = assignmentsByCohort[ca.cohortId] || [];
-        // Mismo criterio que el tablero de Comisiones (ver esProfesor en
-        // lib/elegibilidad.js): por descarte, para no perder a la gente cuya
-        // asignacion quedo sin cohortRole cargado en el back office.
-        const profs = staffList.filter(esProfesor);
-        const profNames = profs.map(s => users[s.userId] || String(s.userId).substring(0, 8));
+        // Mismo criterio que el tablero de Comisiones (ver
+        // clasificarAsignacion en lib/elegibilidad.js): si el back office no
+        // mando el cohortRole, el rol sale del +tag del mail de la cuenta.
+        const profs = staffList.filter(s => clasificarAsignacion(s, (users[s.userId] && users[s.userId].email) || '') === 'PROFESOR');
+        const profNames = profs.map(s => (users[s.userId] && users[s.userId].name) || String(s.userId).substring(0, 8));
         const postulantesCohort = postulantesCountByCohort[ca.cohortId] || 0;
         postulantesTotal += postulantesCohort;
         const durationMs = durationByCohort[ca.cohortId] || CLASS_DURATION_MS;
