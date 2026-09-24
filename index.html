@@ -2294,18 +2294,27 @@ function loadCertificaciones(){
     });
 }
 
+// Cuantas excepciones se ven "de entrada" sin scrollear (las mas nuevas primero);
+// el resto de la lista sigue ahi, solo que hay que scrollear el recuadro para verlas.
+const EXCEPCIONES_VISIBLES_SIN_SCROLL = 3;
+
 function renderExcepciones(){
   const wrap = document.getElementById('excepcionesListWrap');
   if(!wrap) return;
-  const lista = CERT_RESP.excepciones || [];
+  const lista = (CERT_RESP.excepciones || []).slice()
+    .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
   if(!lista.length){
     wrap.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;margin-top:6px;">No hay excepciones activas.</p>';
     return;
   }
-  wrap.innerHTML = '<div class="curso-rol-label" style="margin-top:10px;">Excepciones activas (' + lista.length + ')</div>'
-    + lista.map(e => '<div class="habilitado-item"><span class="curso-nombre">' + escapeHtml(e.nombre || '(sin nombre)') + '</span>'
+  const items = lista.map(e => '<div class="habilitado-item"><span class="curso-nombre">' + escapeHtml(e.nombre || '(sin nombre)') + '</span>'
       + '<span style="color:var(--ink-soft);font-size:11px;flex:1;margin:0 10px;">' + escapeHtml(e.email || '') + ' &middot; ' + escapeHtml(e.curso || '') + ' &middot; ' + (e.rol === 'profesor' ? 'Profesor' : 'Tutor Adjunto') + ' &middot; agregada el ' + formatFechaCorta(e.fecha) + '</span>'
       + '<button class="bo-btn" style="color:var(--red);" onclick="quitarExcepcionCert(\'' + e.id + '\')">Quitar</button></div>').join('');
+  // Con mas de 3 excepciones, el recuadro queda a una altura fija (aprox 3 filas) y
+  // scrollea adentro en vez de estirar toda la pantalla - las mas recientes primero.
+  const necesitaScroll = lista.length > EXCEPCIONES_VISIBLES_SIN_SCROLL;
+  wrap.innerHTML = '<div class="curso-rol-label" style="margin-top:10px;">Excepciones activas (' + lista.length + ')' + (necesitaScroll ? ' &mdash; se muestran las ' + EXCEPCIONES_VISIBLES_SIN_SCROLL + ' mas recientes, scrolleá para ver el resto' : '') + '</div>'
+    + '<div style="' + (necesitaScroll ? 'max-height:130px;overflow-y:auto;' : '') + '">' + items + '</div>';
 }
 
 function addExcepcionCert(){
@@ -2434,6 +2443,32 @@ function applyCertFilters(){
   renderCertRows();
 }
 
+// Arma el texto del tooltip del semaforo (Cumple/No cumple), explicando en
+// criollo por que dio ese resultado - usa los mismos datos que ya calcula
+// calcularSemaforo() en el back (rating promedio, si llega al minimo, fecha
+// de la ultima comision y si esta dentro de los dias de recencia permitidos).
+function motivoSemaforo(checklist, verde){
+  if(!checklist) return '';
+  const ratingMinimo = CERT_RESP.ratingMinimo != null ? CERT_RESP.ratingMinimo : 4.7;
+  const diasRecencia = CERT_RESP.diasRecencia != null ? CERT_RESP.diasRecencia : 365;
+  const ratingTxt = checklist.ratingPromedio != null ? Number(checklist.ratingPromedio).toFixed(2) : 'sin datos';
+  const partes = [];
+  if(checklist.ratingOk){
+    partes.push('Rating promedio ' + ratingTxt + ' (minimo: ' + ratingMinimo + ') ✓');
+  } else {
+    partes.push('Rating promedio ' + ratingTxt + ', por debajo del minimo requerido de ' + ratingMinimo);
+  }
+  if(checklist.recienteOk){
+    partes.push('Ultima comision el ' + formatFechaCorta(checklist.ultimaComisionFecha) + ', dentro de los ' + diasRecencia + ' dias de actividad reciente ✓');
+  } else if(checklist.ultimaComisionFecha){
+    partes.push('Ultima comision el ' + formatFechaCorta(checklist.ultimaComisionFecha) + ', hace mas de ' + diasRecencia + ' dias');
+  } else {
+    partes.push('No se encontro ninguna comision asignada recientemente');
+  }
+  if(checklist.error) partes.push('Ademas, no se pudieron validar todos los datos (' + checklist.error + ')');
+  return (verde ? 'Cumple: ' : 'No cumple: ') + partes.join(' | ');
+}
+
 function renderCertRows(){
   const tbody = document.getElementById('certTbody');
   const noRes = document.getElementById('cert-no-results');
@@ -2449,18 +2484,25 @@ function renderCertRows(){
     let semaforoHtml = '<span style="color:var(--ink-soft);font-size:11px;">-</span>';
     if(c.estado === 'pendiente' && c.checklist){
       const verde = c.checklist.semaforo === 'verde';
-      semaforoHtml = '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:' + (verde ? 'var(--green)' : 'var(--red)') + ';"></span>' + (verde ? 'Cumple' : 'No cumple');
+      const motivo = escapeHtml(motivoSemaforo(c.checklist, verde));
+      semaforoHtml = '<span title="' + motivo + '" style="cursor:help;">'
+        + '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:' + (verde ? 'var(--green)' : 'var(--red)') + ';"></span>' + (verde ? 'Cumple' : 'No cumple') + '</span>';
     }
     let cooldownNote = '';
     if(c.estado === 'desaprobado' && c.cooldownHasta && new Date(c.cooldownHasta) > new Date()){
       cooldownNote = '<div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">Bloqueado hasta ' + formatFechaCorta(c.cooldownHasta) + '</div>';
     }
-    let acciones = '<button class="bo-btn" onclick="openRespuestasModal(\'' + c.id + '\')">Ver respuestas</button> ';
-    if(c.estado === 'pendiente'){
-      acciones += '<button class="bo-btn" style="color:var(--green);" onclick="aprobarCert(\'' + c.id + '\')">Aprobar</button> '
-        + '<button class="bo-btn" style="color:var(--red);" onclick="desaprobarCert(\'' + c.id + '\')">Desaprobar</button>';
-    } else if(c.estado === 'desaprobado'){
-      acciones += '<button class="bo-btn" onclick="habilitarDeNuevoCert(\'' + c.id + '\')">Habilitar de nuevo</button>';
+    // Aprobar/Desaprobar quedan siempre disponibles, sea cual sea el estado
+    // actual (pendiente, aprobado o desaprobado) - permite corregir una
+    // decision tomada antes sin tener que pasar primero por "Habilitar de
+    // nuevo". Ese boton aparte sigue existiendo solo para desaprobado, porque
+    // hace otra cosa (saca el cooldown de 6 meses para que la persona pueda
+    // volver a rendir la evaluacion).
+    let acciones = '<button class="bo-btn" onclick="openRespuestasModal(\'' + c.id + '\')">Ver respuestas</button> '
+      + '<button class="bo-btn" style="color:var(--green);" onclick="aprobarCert(\'' + c.id + '\')">Aprobar</button> '
+      + '<button class="bo-btn" style="color:var(--red);" onclick="desaprobarCert(\'' + c.id + '\')">Desaprobar</button>';
+    if(c.estado === 'desaprobado'){
+      acciones += ' <button class="bo-btn" onclick="habilitarDeNuevoCert(\'' + c.id + '\')">Habilitar de nuevo</button>';
     }
     const excepTag = c.esExcepcion ? ' <span style="background:var(--accent-light);color:var(--accent-dark);font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:999px;vertical-align:1px;">EXCEPCION</span>' : '';
     return '<tr>'
@@ -2484,11 +2526,19 @@ function postCertAction(action, payload){
   }).then(r => r.json());
 }
 
+// mensajeMail(): arma el final del toast segun lo que realmente paso con el
+// mail (resp.mail.enviado), en vez de asumir que siempre se mando - si
+// falta LOOPS_API_KEY en Vercel o Loops devuelve un error, se avisa en vez
+// de decir "se disparo el mail" sin haber pasado.
+function mensajeMail(resp){
+  if(resp.cert && resp.cert.esExcepcion) return ' (no se envia mail: es un caso de excepcion/proceso de seleccion).';
+  if(resp.mail && resp.mail.enviado) return ' Se envio el mail correspondiente.';
+  return ' No se pudo enviar el mail' + (resp.mail && resp.mail.motivo ? ' (' + resp.mail.motivo + ')' : '') + '.';
+}
 function aprobarCert(id){
   postCertAction('aprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
-      showToast(viaExcepcion ? 'Certificacion aprobada. Se agrego el curso al perfil (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.');
+      showToast('Certificacion aprobada. Se agrego el curso al perfil.' + mensajeMail(resp), 5000);
       loadCertificaciones();
     }
     else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
@@ -2497,8 +2547,7 @@ function aprobarCert(id){
 function desaprobarCert(id){
   postCertAction('desaprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
-      showToast(viaExcepcion ? 'Certificacion desaprobada (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion desaprobada. Se disparo el mail generico de rechazo.');
+      showToast('Certificacion desaprobada.' + mensajeMail(resp), 5000);
       loadCertificaciones();
     }
     else showToast('No se pudo desaprobar: ' + ((resp && resp.error) || ''), 4000);
@@ -2519,8 +2568,7 @@ function habilitarDeNuevoCert(id){
 function aprobarCertPerfil(id){
   postCertAction('aprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
-      showToast(viaExcepcion ? 'Certificacion aprobada. Se agrego el curso al perfil (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion aprobada. Se agrego el curso al perfil y se disparo el mail de aprobacion.');
+      showToast('Certificacion aprobada. Se agrego el curso al perfil.' + mensajeMail(resp), 5000);
       if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
     } else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
   });
@@ -2528,8 +2576,7 @@ function aprobarCertPerfil(id){
 function desaprobarCertPerfil(id){
   postCertAction('desaprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      const viaExcepcion = resp.cert && resp.cert.esExcepcion;
-      showToast(viaExcepcion ? 'Certificacion desaprobada (no se envia mail: es un caso de excepcion/proceso de seleccion).' : 'Certificacion desaprobada. Se disparo el mail generico de rechazo.');
+      showToast('Certificacion desaprobada.' + mensajeMail(resp), 5000);
       if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
     } else showToast('No se pudo desaprobar: ' + ((resp && resp.error) || ''), 4000);
   });
