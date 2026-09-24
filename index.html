@@ -781,6 +781,14 @@ function loadData(auto){
     .then(r => r.json())
     .then(payload => onDataLoaded(payload, auto))
     .catch(err => onLoadError({message: err && err.message ? err.message : String(err)}, auto));
+  // Si la pestaña de Certificaciones ya se abrio al menos una vez en esta
+  // sesion, se refresca en paralelo con el mismo boton "Actualizar datos" y
+  // el mismo auto-refresh de 5 minutos que usa Comisiones - antes
+  // certLoadedOnce hacia que esa pestaña se cargara una sola vez por sesion
+  // y quedara desactualizada en silencio si se la dejaba abierta (no se
+  // pide de nuevo si todavia no se visito, para no gastar una consulta que
+  // nadie va a ver).
+  if (typeof certLoadedOnce !== 'undefined' && certLoadedOnce) loadCertificaciones();
 }
 
 function onDataLoaded(payload, auto){
