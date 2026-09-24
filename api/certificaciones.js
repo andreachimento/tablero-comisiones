@@ -11,15 +11,15 @@
 //
 // Cuando se aprueba una certificacion, se le agrega el curso+rol al perfil
 // de la persona (mismo mecanismo que "Cursos habilitados a dictar" usa hoy).
-// Aprobar y desaprobar disparan un mail automatico - ver enviarMailDecision:
-// por ahora queda como un "stub" (no envia nada de verdad todavia) hasta que
-// se defina que servicio de mail se va a usar; se deja el punto de enganche
-// listo y documentado.
+// Aprobar y desaprobar disparan un mail automatico via Loops - ver
+// enviarMailDecision() y lib/loops.js (mismo servicio de mail que ya usa
+// Coderhouse para el resto de las comunicaciones a Staff).
 // ============================================================================
 
 const { getOverlay, setOverlay, personKey, getAccountsForPerson } = require('../lib/overlay');
 const { getAllCertificaciones, saveCertificacion, getAllPreguntas, getPreguntas, savePreguntas, genId, getAllExcepciones, addExcepcion, quitarExcepcion } = require('../lib/certificaciones');
 const { getPostHogRatings } = require('../lib/posthog');
+const { enviarMailCertificacionAprobada, enviarMailCertificacionDesaprobada } = require('../lib/loops');
 
 const RATING_MINIMO = 4.7;
 const DIAS_RECENCIA = 365;
@@ -115,10 +115,12 @@ async function calcularSemaforo(email, overlay, env) {
   }
 }
 
-// Punto de enganche para el mail automatico de aprobacion/rechazo. Todavia
-// no dispara nada de verdad (falta elegir un servicio de mail y sus
-// credenciales) - queda el lugar listo para conectarlo sin tener que tocar
-// el resto de la logica de aprobar/desaprobar.
+// Dispara el mail automatico de aprobacion/rechazo via Loops (lib/loops.js).
+// El de "desaprobado" es siempre un mensaje generico, sin explicar el motivo
+// especifico (rating, comentarios, necesidad de staff - varia segun el caso
+// y no siempre es prudente decirlo); la nota de la evaluacion tampoco entra
+// ahi porque para llegar a "pendiente" ya aprobo el examen (nota >= 8) - lo
+// que se decide en esta pantalla es otra cosa.
 async function enviarMailDecision(cert, decision) {
   // Las certificaciones que vienen de una excepcion (candidatos en proceso
   // de seleccion, sin mail de Coderhouse todavia) NO reciben este mail: es
@@ -128,14 +130,10 @@ async function enviarMailDecision(cert, decision) {
     console.log('[certificaciones] No se envia mail de ' + decision + ' a', cert.email, '(certificacion via excepcion)');
     return { enviado: false, motivo: 'No se envia mail: certificacion via excepcion (proceso de seleccion)' };
   }
-  // TODO: conectar un servicio de mail (Resend / SendGrid / el que se elija)
-  // usando una Environment Variable con la API key, y armar aca el texto:
-  //  - aprobado: puede mencionar el curso+rol.
-  //  - desaprobado: mensaje generico, sin explicar el motivo especifico
-  //    (rating, comentarios, evaluacion, necesidad de staff - varia segun el
-  //    caso y no siempre es prudente decirlo).
-  console.log('[certificaciones] TODO enviar mail de ' + decision + ' a', cert.email);
-  return { enviado: false, motivo: 'Servicio de mail todavia no configurado' };
+  if (decision === 'aprobado') {
+    return enviarMailCertificacionAprobada({ email: cert.email, nombre: cert.nombre, curso: cert.curso, rol: cert.rol, nota: cert.nota });
+  }
+  return enviarMailCertificacionDesaprobada({ email: cert.email, nombre: cert.nombre, curso: cert.curso, rol: cert.rol, cooldownHasta: cert.cooldownHasta });
 }
 
 module.exports = async function handler(req, res) {
