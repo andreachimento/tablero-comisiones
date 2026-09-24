@@ -773,6 +773,15 @@ function showToast(msg, ms){
   setTimeout(()=>t.classList.remove('show'), ms || 3500);
 }
 
+// Declarada ACA arriba (y no mas abajo, junto al resto del codigo de
+// Certificaciones) porque loadData() ya la necesita desde la primera carga
+// de la pagina. Declararla mas abajo con "let" rompia TODA la pagina: en
+// JS, un "let" queda en zona muerta hasta la linea donde se declara, y
+// hasta usarlo con "typeof" tira ReferenceError si se lo nombra antes -
+// eso cortaba la ejecucion del script en la carga inicial y por eso
+// dejaban de andar Staff y Diplomaturas tambien (no solo Certificaciones).
+let certLoadedOnce = false;
+
 function loadData(auto){
   const b = document.getElementById('refreshBtn');
   if(!auto){ b.textContent = 'Actualizando...'; b.disabled = true; }
@@ -788,7 +797,7 @@ function loadData(auto){
   // y quedara desactualizada en silencio si se la dejaba abierta (no se
   // pide de nuevo si todavia no se visito, para no gastar una consulta que
   // nadie va a ver).
-  if (typeof certLoadedOnce !== 'undefined' && certLoadedOnce) loadCertificaciones();
+  if (certLoadedOnce) loadCertificaciones();
 }
 
 function onDataLoaded(payload, auto){
@@ -2269,7 +2278,7 @@ document.getElementById('dipTbody').addEventListener('click', function(e){
 // ============================================================================
 
 let CERT_RESP = { certificaciones: [], preguntas: {}, excepciones: [], ratingMinimo: 4.7, diasRecencia: 365 };
-let certLoadedOnce = false;
+// certLoadedOnce se declara mas arriba, junto a loadData() - ver el comentario ahi.
 let certVisibleRows = [];
 
 function loadCertificaciones(){
