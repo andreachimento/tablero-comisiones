@@ -1188,6 +1188,71 @@ let currentStaffProfile = null;
 let staffVisibleRows = [];
 let allCourseNames = [];
 
+// ----------------------------------------------------------------------------
+// Cursos que se certifican (lista oficial, confirmada por Andrea - set. 2026)
+// ----------------------------------------------------------------------------
+// El selector de curso de la solapa Certificaciones y las sugerencias de los
+// inputs de texto libre NO se arman mas juntando lo que haya cargado en los
+// datos. Antes se armaban con la union de tres fuentes de texto libre (los
+// cursosHabilitados de cada perfil, los cursos de las certificaciones
+// pedidas, y las claves del banco de preguntas); como las tres son texto
+// escrito a mano, se acumulaban variantes del mismo curso -mayusculas
+// distintas, con y sin "Flex", nombres viejos, typos- y cada variante
+// figuraba como un curso mas. De ahi que el listado fuera mas largo que el
+// catalogo real.
+//
+// Ahora la lista es esta y solo esta. Para agregar o sacar un curso, se edita
+// aca: es el unico lugar.
+//
+// OJO: esto cambia lo que se MUESTRA, no borra ningun dato. Una certificacion
+// ya cargada para un curso que no este en esta lista sigue existiendo y sigue
+// apareciendo en la tabla; lo que no se puede es filtrar por ese curso desde
+// el selector.
+const CURSOS_OFICIALES = [
+  'Canva',
+  'Fundamentos del Diseño Gráfico',
+  'Photoshop e Illustrator',
+  'Análisis de Datos para Negocios',
+  'Ciberseguridad',
+  'Data Analytics',
+  'Data Science I: Fundamentos para la Ciencia de Datos',
+  'Data Science II: Machine Learning para la Ciencia de Datos',
+  'Data Science III: NLP & Deep Learning aplicado a Ciencia de Datos',
+  'Data Engineering',
+  'Excel',
+  'Excel avanzado',
+  'Power BI',
+  'Tableau',
+  'Diseño UX/UI',
+  'Diseño UX/UI Avanzado',
+  'Prototipado con Figma',
+  'UX Research',
+  'UX Writing',
+  'Community Manager',
+  'Fundamentos del Marketing Digital',
+  'Google Ads, Analytics & Looker Studio',
+  'Contenido para redes sociales',
+  'Copywriting',
+  'Fotografía para RRSS',
+  'Growth Marketing',
+  'Paid media: Meta & Google Ads',
+  'SEO para AI',
+  'Customer experience (Cx)',
+  'E-Commerce',
+  'Product Manager',
+  'Scrum - Metodologías Ágiles',
+  'Cloud Computing (AWS)',
+  'Desarrollo de aplicaciones',
+  'Desarrollo Web',
+  'Javascript',
+  'Programación Backend I: Desarrollo Avanzado de Backend',
+  'Programación Backend II: Diseño y Arquitectura Backend',
+  'Programación Backend (III): Testing y Escalabilidad',
+  'Python',
+  'React JS',
+  'SQL',
+];
+
 const ROLE_LABELS = { profesor: 'Profesor', tutor: 'Tutor Adjunto' };
 const ESTADO_LABELS = { aprobado: 'Aprobado', despido: 'Despido', desaprobado: 'Despido', futuro: 'Consideracion futura', alerta: 'Asignable con alerta', renuncia: 'Renuncia' };
 // Mismas listas que api/staff-update.js (DIAS_DISPONIBLES / FRANJAS_DISPONIBLES) -
@@ -2303,10 +2368,27 @@ function certCourseNames(){
   return Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
 }
 
+// Desplegable "Curso" de la solapa Certificaciones. Es el UNICO control que
+// usa CURSOS_OFICIALES: el resto del tablero sigue sugiriendo lo que haya
+// cargado en los datos, como antes.
+//
+// Antes este desplegable tambien se armaba con certCourseNames(), que junta
+// tres fuentes de texto libre (los cursosHabilitados de cada perfil, los
+// cursos de las certificaciones pedidas y las claves del banco de
+// preguntas). Como las tres se escriben a mano, se fueron acumulando
+// variantes del mismo curso y cada una figuraba como un curso mas: llegaron
+// a convivir "Javascript" y "JavaScript" como dos opciones distintas, mas
+// modulos sueltos de diplomaturas y nombres viejos. Por eso el listado era
+// bastante mas largo que el catalogo real.
+//
+// Cambia lo que se MUESTRA en el filtro, no borra ningun dato: una
+// certificacion cargada para un curso que no este en la lista sigue
+// existiendo y sigue apareciendo en la tabla; lo que no se puede es filtrar
+// por ese curso.
 function buildCertCourseFilter(){
   const sel = document.getElementById('fCertCurso');
   const current = sel.value;
-  const list = certCourseNames();
+  const list = CURSOS_OFICIALES.slice().sort((a, b) => a.localeCompare(b, 'es'));
   sel.innerHTML = '<option value="">Todos los cursos</option>' + list.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('');
   sel.value = current;
 }
