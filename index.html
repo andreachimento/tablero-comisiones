@@ -606,7 +606,7 @@
     <div class="modal-body">
       <div class="controls" style="margin:0 0 14px;">
         <span class="filter-label">Curso</span>
-        <select id="pregCurso" onchange="renderPreguntasAdmin()"><option value="">Seleccionar curso...</option></select>
+        <input type="text" id="pregCurso" list="cursoDatalist" placeholder="Curso... (si es nuevo, se crea solo)" oninput="renderPreguntasAdmin()" style="width:280px;">
         <span class="filter-label">Rol</span>
         <select id="pregRol" onchange="renderPreguntasAdmin()">
           <option value="profesor">Profesor</option>
@@ -2647,11 +2647,11 @@ function preguntasKeyFor(curso, rol){
 
 function abrirGestionPreguntas(){
   document.getElementById('preguntasModalOverlay').classList.remove('hidden');
-  const selCurso = document.getElementById('pregCurso');
-  const current = selCurso.value;
-  const list = certCourseNames();
-  selCurso.innerHTML = '<option value="">Seleccionar curso...</option>' + list.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('');
-  if(current) selCurso.value = current;
+  // pregCurso es texto libre (con sugerencias via datalist compartido) para
+  // poder cargar un curso nuevo que todavia no tiene a nadie habilitado ni
+  // ninguna certificacion pedida - antes era un <select> que solo permitia
+  // elegir entre cursos ya existentes, y no dejaba crear uno.
+  rebuildCursoDatalist();
   limpiarFormPregunta();
   renderPreguntasAdmin();
 }
