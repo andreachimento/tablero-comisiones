@@ -612,7 +612,10 @@
           <option value="profesor">Profesor</option>
           <option value="tutor">Tutor Adjunto</option>
         </select>
+        <button class="quickbtn" onclick="document.getElementById('importarPreguntasFile').click()">Importar JSON</button>
+        <input type="file" id="importarPreguntasFile" accept="application/json" style="display:none;" onchange="importarPreguntasDesdeArchivo(this)">
       </div>
+      <div id="importarPreguntasStatus" style="font-size:12px;color:var(--muted);margin:-8px 0 14px;"></div>
       <div id="preguntasListWrap"></div>
       <div class="card" style="margin-top:14px;">
         <h3 id="pregFormTitle">Agregar pregunta</h3>
@@ -2766,6 +2769,72 @@ function borrarPregunta(id){
       showToast('No se pudo eliminar: ' + ((resp && resp.error) || ''), 4000);
     }
   });
+}
+
+// ============================================================================
+// Importar preguntas en lote desde un archivo JSON (reemplaza las preguntas
+// existentes de cada curso+rol por las nuevas). Formato esperado, un array de:
+//   { "curso": "...", "roles": ["profesor","tutor"], "preguntas": [
+//       { "texto": "...", "opciones": ["A","B","C","D"], "correcta": 0, "puntaje": 10 }
+//   ] }
+// Se usa desde el boton "Importar JSON" en Gestionar preguntas. No requiere
+// tocar Redis ni el codigo: corre enteramente en el navegador de quien lo usa,
+// contra la misma API publica que ya usa el resto de la pantalla.
+// ============================================================================
+async function importarPreguntasDesdeArchivo(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('importarPreguntasStatus');
+  const setStatus = (msg) => { if(statusEl) statusEl.textContent = msg; };
+
+  let cursos;
+  try {
+    const text = await file.text();
+    cursos = JSON.parse(text);
+    if(!Array.isArray(cursos)) throw new Error('El archivo no es un array de cursos.');
+  } catch(e){
+    setStatus('Error leyendo el archivo: ' + e.message);
+    return;
+  }
+
+  if(!confirm('Vas a reemplazar las preguntas de ' + cursos.length + ' curso(s). Esto borra las preguntas actuales de cada curso+rol involucrado y carga las nuevas. Confirmas?')) {
+    inputEl.value = '';
+    return;
+  }
+
+  let totalBorradas = 0, totalAgregadas = 0, erroresCount = 0;
+  const totalCursos = cursos.length;
+
+  for(let i = 0; i < cursos.length; i++){
+    const c = cursos[i];
+    const roles = c.roles || ['profesor', 'tutor'];
+    for(const rol of roles){
+      setStatus('Procesando ' + (i + 1) + '/' + totalCursos + ': ' + c.curso + ' [' + rol + ']...');
+      const key = preguntasKeyFor(c.curso, rol);
+      const existentes = (CERT_RESP.preguntas || {})[key] || [];
+
+      for(const p of existentes){
+        try {
+          const r = await postCertAction('deletePregunta', { curso: c.curso, rol, id: p.id });
+          if(r && r.ok){ totalBorradas++; CERT_RESP.preguntas[key] = r.preguntas; }
+          else { erroresCount++; }
+        } catch(e){ erroresCount++; }
+      }
+
+      for(const p of (c.preguntas || [])){
+        try {
+          const r = await postCertAction('addPregunta', { curso: c.curso, rol, texto: p.texto, opciones: p.opciones, correcta: p.correcta, puntaje: p.puntaje || 10 });
+          if(r && r.ok){ totalAgregadas++; CERT_RESP.preguntas[key] = r.preguntas; }
+          else { erroresCount++; }
+        } catch(e){ erroresCount++; }
+      }
+    }
+  }
+
+  renderPreguntasAdmin();
+  inputEl.value = '';
+  setStatus('Listo: ' + totalAgregadas + ' preguntas cargadas, ' + totalBorradas + ' viejas borradas' + (erroresCount ? ', ' + erroresCount + ' errores (revisa la consola)' : '') + '.');
+  showToast('Importacion completa: ' + totalAgregadas + ' preguntas cargadas.', 5000);
 }
 </script>
 </body>
