@@ -24,6 +24,7 @@
 const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
 const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason, cursoMatches, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
+const { requireAuth } = require('../lib/auth');
 
 // Cuando ya dicto un curso (aparece en su historial real de comisiones), se
 // lo da por habilitado a dictarlo aunque nadie lo haya cargado a mano en el
@@ -89,6 +90,7 @@ async function fetchAssignmentsForAccount(env, userId) {
 }
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   try {
     const rawEmail = String((req.query && req.query.email) || '').toLowerCase().trim();
     if (!rawEmail) { res.status(200).json({ error: 'Falta el parametro email' }); return; }
