@@ -214,17 +214,21 @@ async function buildRows() {
   // Cuantas postulaciones tiene cada comision, para mostrar el numerito en
   // la columna "Postulantes" sin tener que pedir el detalle completo (con
   // el cruce de rating/superposicion) de todas las comisiones de una.
+  //
+  // Son las dos fuentes juntas: el formulario publico (planilla) y el modulo
+  // de cobertura del back office - ver lib/postulacionesBO.js.
+  const assignments = await fetchAllAssignments(env);
+
   let postulantesCountByCohort = {};
   try {
-    const { getAllPostulaciones } = require('../lib/overlay');
-    const todasPostulaciones = await getAllPostulaciones();
+    const { getPostulacionesCombinadas } = require('../lib/postulacionesBO');
+    const todasPostulaciones = await getPostulacionesCombinadas({ assignments, cohorts, productTitle: products });
     todasPostulaciones.forEach(p => {
       if (!p.cohortId) return;
       postulantesCountByCohort[p.cohortId] = (postulantesCountByCohort[p.cohortId] || 0) + 1;
     });
-  } catch (e) { /* si Redis falla, seguimos mostrando el resto del tablero igual, sin el numerito */ }
+  } catch (e) { /* si Redis o el back office fallan, seguimos mostrando el resto del tablero igual, sin el numerito */ }
 
-  const assignments = await fetchAllAssignments(env);
   const cohortIds = new Set(cohorts.map(c => c.id));
   const relevant = assignments.filter(a => cohortIds.has(a.cohortId));
   const userIds = Array.from(new Set(relevant.map(a => a.userId)));

@@ -292,6 +292,16 @@
   .postu-badge.none { color: #b7b9c4; background: transparent; border-color: transparent; font-weight: 500; font-style: italic; cursor: default; }
   .postu-badge.none:hover { color: #b7b9c4; }
 
+  /* Sello que dice de donde salio cada postulante: del formulario publico o
+     del modulo de cobertura del back office (ver lib/postulacionesBO.js). */
+  /* Fondo blanco y borde propio: estos sellos se apoyan sobre tarjetas que ya
+     vienen pintadas de verde/naranja/rojo segun si la persona se puede sumar,
+     asi que necesitan su propio fondo para no desaparecer encima. */
+  .origen-chip { display: inline-block; border-radius: 999px; padding: 1px 7px; font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; white-space: nowrap; vertical-align: middle; background: #fff; border: 1px solid currentColor; }
+  .origen-formulario { color: var(--accent-dark); }
+  .origen-bo { color: #5a45c8; }
+  .origen-ambos { color: #1d7a45; }
+
   .expand-row td { background: #fcfcfd; padding: 0; white-space: normal; }
   .expand-panel { padding: 16px 22px 20px; border-top: 1px dashed var(--line); }
   .expand-panel-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-soft); margin-bottom: 10px; }
@@ -1198,6 +1208,26 @@ function applyFilters(){
 }
 
 // ============================================================================
+// De donde salio cada postulante. Son dos circuitos distintos y conviene no
+// confundirlos:
+//   formulario -> la persona se anoto sola por el sitio publico de
+//                 postulaciones (es la unica via por la que llega gente de
+//                 afuera de Coderhouse, y la unica que trae telefono/LinkedIn).
+//   bo         -> el modulo de cobertura del back office la puso en juego para
+//                 esa comision. NO se anoto ella: la eligio la asignacion
+//                 automatica y lo que figura es su respuesta.
+//   ambos      -> se anoto por formulario Y ademas el back office se la ofrecio.
+const ORIGEN_CHIPS = {
+  formulario: { label: 'Formulario', title: 'Se postulo sola desde el sitio publico de postulaciones' },
+  bo: { label: 'Back Office', title: 'Propuesta por el back office (asignacion automatica) - no se postulo ella' },
+  ambos: { label: 'Formulario + BO', title: 'Se postulo por el formulario y ademas el back office se la ofrecio' },
+};
+function origenChip(origen){
+  const o = ORIGEN_CHIPS[origen] || ORIGEN_CHIPS.formulario;
+  const clase = ORIGEN_CHIPS[origen] ? origen : 'formulario';
+  return '<span class="origen-chip origen-' + clase + '" title="' + escapeHtml(o.title) + '">' + escapeHtml(o.label) + '</span>';
+}
+
 // Postulantes de una comision (fila desplegable en la pestaña Comisiones)
 // ============================================================================
 function renderPostulantesPanel(r){
@@ -1211,7 +1241,7 @@ function renderPostulantesPanel(r){
   const postulantes = cache.postulantes || [];
   if(!postulantes.length){
     return '<div class="expand-panel"><div class="expand-panel-title">Postulantes a la comision #' + r.commission + '</div>'
-      + '<p style="color:var(--ink-soft);font-size:12px;">Todavia no hay postulaciones para esta comision.</p></div>';
+      + '<p style="color:var(--ink-soft);font-size:12px;">Todavia no hay postulantes para esta comision, ni por el formulario publico ni por el back office.</p></div>';
   }
   window.__eligTooltipData = window.__eligTooltipData || {};
   const cards = postulantes.map((p, i) => {
@@ -1228,12 +1258,13 @@ function renderPostulantesPanel(r){
       + '<span class="postu-dot"></span>'
       + '<div class="postu-info">'
       + '<span class="postu-name" data-elig-tooltip="' + key + '">' + escapeHtml(p.nombre) + '</span>'
-      + '<span class="postu-role">(' + (p.rol ? (ROLE_LABELS[p.rol] || p.rol) : 'rol a definir') + ')</span>'
+      + '<span class="postu-role">(' + (p.rol ? (ROLE_LABELS[p.rol] || p.rol) : 'rol a definir') + ')</span> ' + origenChip(p.origen)
       + '<div class="postu-rating">' + ratingHtml + '</div>'
       + '<div class="postu-reason">' + escapeHtml(p.reason || '') + '</div>'
       + '</div></div>';
   }).join('');
   return '<div class="expand-panel"><div class="expand-panel-title">Postulantes a la comision #' + r.commission + ' &middot; ' + escapeHtml(r.course) + '</div>'
+    + '<p style="color:var(--ink-soft);font-size:10.5px;font-style:italic;margin:-4px 0 10px;">El sello indica el origen: <b>Formulario</b> = se anoto sola desde el sitio publico. <b>Back Office</b> = la propuso la asignacion automatica.</p>'
     + '<div class="postu-grid">' + cards + '</div></div>';
 }
 
@@ -1818,8 +1849,8 @@ function renderStaffProfile(p){
       const linkClass = po.cohortId ? ' hist-item-link' : '';
       const linkAttr = po.cohortId ? ' onclick="openBackOffice(\'' + escapeHtml(String(po.cohortId)) + '\')" title="Ver esta comision en Back Office"' : '';
       const linkHint = po.cohortId ? '<div class="hist-item-link-hint">Ver en Back Office &rarr;</div>' : '';
-      return '<div class="hist-item' + eligClass + linkClass + '"' + linkAttr + '><div class="com-left"><span class="com-curso">' + escapeHtml(po.curso || '') + ' <span class="com-num">#' + escapeHtml(String(po.comisionNumber || '')) + '</span></span>'
-        + '<span class="com-fechas">Postulado: ' + formatFechaCorta(po.fecha) + ' &middot; Rol: ' + (po.rol ? (ROLE_LABELS[po.rol] || po.rol) : 'a definir') + '</span>'
+      return '<div class="hist-item' + eligClass + linkClass + '"' + linkAttr + '><div class="com-left"><span class="com-curso">' + escapeHtml(po.curso || '') + ' <span class="com-num">#' + escapeHtml(String(po.comisionNumber || '')) + '</span> ' + origenChip(po.origen) + '</span>'
+        + '<span class="com-fechas">' + (po.origen === 'bo' ? 'Propuesta: ' : 'Postulado: ') + formatFechaCorta(po.fecha) + ' &middot; Rol: ' + (po.rol ? (ROLE_LABELS[po.rol] || po.rol) : 'a definir') + '</span>'
         + eligReason + linkHint + '</div>'
         + '<div class="hist-right"><span class="estado-tag estado-postulacion-' + estado + '">' + (POSTULACION_ESTADO_LABELS[estado] || estado) + '</span>' + eligPill + '</div></div>';
     }).join('') + '</div>';

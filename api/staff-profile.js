@@ -21,7 +21,8 @@
 // sin tener que recorrer datos de las 700+ personas del back office.
 // ============================================================================
 
-const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson, getAllPostulaciones } = require('../lib/overlay');
+const { getOverlay, setOverlay, defaultOverlay, personKey, getAccountsForPerson } = require('../lib/overlay');
+const { getPostulacionesCombinadas } = require('../lib/postulacionesBO');
 const { minutesOfDay, timeHM, CLASS_DURATION_MS, classifyOverlap, computeColorReason, cursoMatches, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 const { requireAuth } = require('../lib/auth');
@@ -317,7 +318,7 @@ module.exports = async function handler(req, res) {
     // ve en la pestaña Comisiones, para no tener que entrar ahi a chequearlo.
     let postulaciones = [];
     try {
-      const todas = await getAllPostulaciones();
+      const todas = await getPostulacionesCombinadas();
       postulaciones = todas.filter(p => personKey(p.email) === email);
       postulaciones.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
 

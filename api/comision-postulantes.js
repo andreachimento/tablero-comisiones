@@ -9,7 +9,8 @@
 // nombre.
 // ============================================================================
 
-const { getOverlay, personKey, getAllPostulaciones, getAccountsForPerson } = require('../lib/overlay');
+const { getOverlay, personKey, getAccountsForPerson } = require('../lib/overlay');
+const { getPostulacionesCombinadas } = require('../lib/postulacionesBO');
 const { DAYS_MAP, ROLE_LABEL, CLASS_DURATION_MS, dateDMY, timeHM, minutesOfDay, classifyOverlap, computeColorReason, cursoMatches, fetchClassDurationsMs } = require('../lib/elegibilidad');
 const { getPostHogRatings } = require('../lib/posthog');
 const { requireAuth } = require('../lib/auth');
@@ -148,7 +149,7 @@ module.exports = async function handler(req, res) {
 
     const [targetCohort, todasPostulaciones] = await Promise.all([
       apiGet(env.BASE, `/student/enrollment/m2m/admin/cohorts/${cohortId}`, env.STUDENT_KEY),
-      getAllPostulaciones().catch(() => []),
+      getPostulacionesCombinadas().catch(() => []),
     ]);
 
     if (!targetCohort || !targetCohort.id) {
@@ -256,6 +257,11 @@ module.exports = async function handler(req, res) {
         rol: rolMostrado,
         fecha: d.p.fecha,
         estadoPostulacion: d.p.estado,
+        // De donde salio: 'formulario' (se anoto por el sitio publico), 'bo'
+        // (el back office se la propuso) o 'ambos'. Ver lib/postulacionesBO.js.
+        origen: d.p.origen || 'formulario',
+        boEstadoOferta: d.p.boEstadoOferta || null,
+        boTipo: d.p.boTipo || null,
         ratingPromedio,
         ratingCount,
         ratingSource,

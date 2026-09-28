@@ -13,7 +13,7 @@
 // ============================================================================
 
 const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM, fetchClassDurationsMs, clasificarAsignacion } = require('../lib/elegibilidad');
-const { getAllPostulaciones } = require('../lib/overlay');
+const { getPostulacionesCombinadas } = require('../lib/postulacionesBO');
 const { requireAuth } = require('../lib/auth');
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -120,7 +120,7 @@ async function buildRows() {
   // poder mostrar el numerito por comision interna y el total por diplomatura.
   let postulantesCountByCohort = {};
   try {
-    const todasPostulaciones = await getAllPostulaciones();
+    const todasPostulaciones = await getPostulacionesCombinadas();
     todasPostulaciones.forEach(p => {
       if (!p.cohortId) return;
       postulantesCountByCohort[p.cohortId] = (postulantesCountByCohort[p.cohortId] || 0) + 1;
