@@ -23,6 +23,7 @@ const DAYS_MAP = { 1: 'Lun', 2: 'Mar', 3: 'Mie', 4: 'Jue', 5: 'Vie', 6: 'Sab', 7
 const TZ = 'America/Argentina/Buenos_Aires';
 
 const { CLASS_DURATION_MS, fetchClassDurationsMs, clasificarAsignacion } = require('../lib/elegibilidad');
+const { requireAuth } = require('../lib/auth');
 
 function getEnv() {
   const BASE = process.env.BACKOFFICE_API_URL;
@@ -299,6 +300,7 @@ async function buildRows() {
 }
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   try {
     const data = await buildRows();
     res.status(200).json(data);
