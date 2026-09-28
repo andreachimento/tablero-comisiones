@@ -7,6 +7,7 @@
 
 const crypto = require('crypto');
 const { getOverlay, setOverlay } = require('../lib/overlay');
+const { requireAuth } = require('../lib/auth');
 // Sincronizacion con el CRM de Relaciones Laborales de Notion (accion
 // 'syncNotionComments' mas abajo). Vive ACA adentro (y no en su propio
 // archivo api/staff-comments-sync.js, como se penso originalmente) para no
@@ -30,6 +31,7 @@ const DIAS_DISPONIBLES = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', '
 const FRANJAS_DISPONIBLES = ['7:30-10:00hs', '10:00-12:00hs', '11:00-13:00hs', '18:30-21:00hs', '19:00-21:00hs', '20:30-22:30hs'];
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Metodo no permitido, usar POST' });
     return;
