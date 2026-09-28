@@ -32,6 +32,7 @@ const {
   getAllCertificaciones, getAllPreguntas, getAllExcepciones,
 } = require('../lib/certificaciones');
 const { resolveCurso, esDescartable } = require('../lib/cursosCanonicos');
+const { requireAuth } = require('../lib/auth');
 
 const NOTION_IMPORT_SECRET = 'coderhouse-notion-import-2026';
 const NOTION_IMPORT_BATCH_SIZE_DEFAULT = 30;
@@ -603,6 +604,7 @@ async function handleCursosUnificar(req, res) {
 }
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   const job = (req.query && req.query.job) || 'seed-staff';
   if (job === 'import-notion-comments') {
     await handleImportNotionComments(req, res);
