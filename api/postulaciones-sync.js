@@ -16,8 +16,10 @@
 // ============================================================================
 
 const { syncPostulacionesFromSheet } = require('../lib/postulacionesSync');
+const { requireAuth } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   try {
     const secret = process.env.CRON_SECRET;
     const auth = req.headers && req.headers.authorization;
