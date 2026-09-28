@@ -398,9 +398,34 @@
   .btn-excel { margin-top: 0; background: var(--green); color: white; border: none; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
   .btn-excel:hover { background: #0b8059; }
   .btn-excel:disabled { opacity: .6; cursor: default; }
+
+  /* Pantalla de ingreso (ver "acceso al tablero" en el script) */
+  #gate { position: fixed; inset: 0; z-index: 9999; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  #gate .gate-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 30px 28px; width: min(400px, 100%); box-shadow: 0 8px 30px rgba(0,0,0,.07); }
+  #gate .logo-wordmark { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); text-transform: uppercase; margin-bottom: 18px; }
+  #gate .logo-wordmark span { color: var(--accent); }
+  #gate h2 { font-size: 16px; margin-bottom: 6px; }
+  #gate p { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 16px; }
+  #gate input { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 10px; }
+  #gate input:focus { outline: none; border-color: var(--accent); }
+  #gate button { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  #gate button:hover { background: var(--accent-dark); }
+  #gate button:disabled { opacity: .6; cursor: default; }
+  #gate .gate-msg { font-size: 12.5px; color: var(--red); margin-bottom: 10px; min-height: 16px; }
 </style>
 </head>
 <body>
+<div id="gate">
+  <div class="gate-card">
+    <div class="logo-wordmark">CODER<span>HOUSE</span></div>
+    <h2>Tablero de Comisiones</h2>
+    <p>Este tablero tiene datos del staff. Ingresa la contrasena del equipo para verlo.</p>
+    <div class="gate-msg" id="gateMsg"></div>
+    <input type="password" id="gatePass" placeholder="Contrasena" autocomplete="current-password" onkeydown="if(event.key==='Enter') entrarAlTablero()">
+    <button id="gateBtn" onclick="entrarAlTablero()">Ingresar</button>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <div class="header">
   <div class="titlewrap">
@@ -662,6 +687,96 @@
 </div>
 
 <script>
+// ============================================================================
+// ACCESO AL TABLERO
+// ============================================================================
+// La contrasena se guarda en sessionStorage (dura mientras la pestaña este
+// abierta; al cerrarla hay que volver a ingresarla) y viaja en el header
+// 'x-tablero-password' en CADA llamada a /api. La validacion de verdad esta
+// del lado del servidor, en lib/auth.js: esta pantalla sola no protegeria
+// nada, porque los datos los sirven los endpoints y se pueden pedir por URL
+// sin pasar por aca.
+// ============================================================================
+let TABLERO_PASSWORD = '';
+try { TABLERO_PASSWORD = sessionStorage.getItem('tablero_pass') || ''; } catch(e) { /* modo privado */ }
+
+function autorizado(){ return !!TABLERO_PASSWORD; }
+
+// Un unico envoltorio sobre fetch le agrega la contrasena a todas las
+// llamadas a /api. Asi no hay que acordarse de sumarla en cada una de las 11
+// que hay repartidas por el archivo, ni en las que se agreguen despues.
+const fetchOriginal = window.fetch.bind(window);
+window.fetch = async function(entrada, opciones){
+  const url = typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '';
+  const esApiPropia = url.startsWith('/api/') || url.startsWith(location.origin + '/api/');
+  if (!esApiPropia) return fetchOriginal(entrada, opciones);
+
+  const op = Object.assign({}, opciones);
+  op.headers = Object.assign({}, (opciones && opciones.headers) || {}, { 'x-tablero-password': TABLERO_PASSWORD });
+  const resp = await fetchOriginal(entrada, op);
+  if (resp.status === 401) {
+    // La contrasena cambio, o nunca fue valida: volvemos a pedirla.
+    cerrarSesionTablero('La contrasena no es correcta.');
+  }
+  return resp;
+};
+
+function mostrarGate(msg){
+  const g = document.getElementById('gate');
+  if (g) g.style.display = 'flex';
+  const m = document.getElementById('gateMsg');
+  if (m) m.textContent = msg || '';
+  const b = document.getElementById('gateBtn');
+  if (b) { b.disabled = false; b.textContent = 'Ingresar'; }
+}
+
+function cerrarSesionTablero(msg){
+  TABLERO_PASSWORD = '';
+  try { sessionStorage.removeItem('tablero_pass'); } catch(e) {}
+  mostrarGate(msg);
+}
+
+async function entrarAlTablero(){
+  const input = document.getElementById('gatePass');
+  const btn = document.getElementById('gateBtn');
+  const clave = (input.value || '').trim();
+  if (!clave) { document.getElementById('gateMsg').textContent = 'Escribi la contrasena.'; return; }
+  btn.disabled = true; btn.textContent = 'Verificando...';
+  document.getElementById('gateMsg').textContent = '';
+
+  TABLERO_PASSWORD = clave;
+  // Probamos contra un endpoint liviano antes de dar por buena la clave.
+  let resp;
+  try {
+    resp = await fetchOriginal('/api/staff-rating-comments?cohortId=prueba-de-acceso', { headers: { 'x-tablero-password': clave } });
+  } catch(e) {
+    TABLERO_PASSWORD = '';
+    mostrarGate('No se pudo conectar. Proba de nuevo.');
+    return;
+  }
+  if (resp.status === 401) {
+    TABLERO_PASSWORD = '';
+    mostrarGate('La contrasena no es correcta.');
+    return;
+  }
+  if (resp.status === 500) {
+    let msg = 'Error del servidor.';
+    try { const j = await resp.json(); if (j && j.error) msg = j.error; } catch(e) {}
+    TABLERO_PASSWORD = '';
+    mostrarGate(msg);
+    return;
+  }
+  try { sessionStorage.setItem('tablero_pass', clave); } catch(e) {}
+  input.value = '';
+  document.getElementById('gate').style.display = 'none';
+  arrancarTablero();
+}
+
+function arrancarTablero(){
+  buildHeader();
+  loadData();
+}
+
 let DATA = [];
 let hasLoadedOnce = false;
 
@@ -839,7 +954,7 @@ function triggerRefresh(){ loadData(false); }
 // Coderhouse en segundo plano, asi si se crea o se cancela una comision el
 // tablero lo refleja solo, sin que nadie tenga que apretar "Actualizar datos".
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
-setInterval(() => loadData(true), AUTO_REFRESH_MS);
+setInterval(() => { if (autorizado()) loadData(true); }, AUTO_REFRESH_MS);
 
 // Si la pestaña estuvo en segundo plano (minimizada u otra pestaña activa) y
 // la persona vuelve a mirarla, se actualiza al toque en vez de esperar al
@@ -1195,8 +1310,10 @@ function updateStats(){
     '<div class="stat-card"><div class="num">' + b2b + '</div><div class="lbl">B2B</div></div>';
 }
 
-buildHeader();
-loadData();
+// Si todavia no ingresaron la contrasena, la pantalla de ingreso queda
+// arriba y el tablero no pide ni un dato. Al ingresarla, entrarAlTablero()
+// llama a arrancarTablero().
+if (autorizado()) { document.getElementById('gate').style.display = 'none'; arrancarTablero(); }
 
 // ============================================================================
 // PESTAÑA STAFF
