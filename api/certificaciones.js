@@ -20,6 +20,7 @@ const { getOverlay, setOverlay, personKey, getAccountsForPerson } = require('../
 const { getAllCertificaciones, saveCertificacion, getAllPreguntas, getPreguntas, savePreguntas, genId, getAllExcepciones, addExcepcion, quitarExcepcion } = require('../lib/certificaciones');
 const { getPostHogRatings } = require('../lib/posthog');
 const { enviarMailCertificacionAprobada, enviarMailCertificacionDesaprobada } = require('../lib/loops');
+const { requireAuth } = require('../lib/auth');
 
 const RATING_MINIMO = 4.7;
 const DIAS_RECENCIA = 365;
@@ -137,6 +138,7 @@ async function enviarMailDecision(cert, decision) {
 }
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   try {
     if (req.method === 'GET') {
       const env = getEnv();
