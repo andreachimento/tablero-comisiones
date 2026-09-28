@@ -14,6 +14,7 @@
 
 const { DAYS_MAP, CLASS_DURATION_MS, dateDMY, timeHM, fetchClassDurationsMs, clasificarAsignacion } = require('../lib/elegibilidad');
 const { getAllPostulaciones } = require('../lib/overlay');
+const { requireAuth } = require('../lib/auth');
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
@@ -237,6 +238,7 @@ async function buildRows() {
 }
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   try {
     const data = await buildRows();
     res.status(200).json(data);
