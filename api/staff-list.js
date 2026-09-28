@@ -29,6 +29,7 @@
 const { getAllOverlays, defaultOverlay, personKey, mergeOverlays, setAccountsIndexBulk, deleteOverlayEntries, OVERLAY_KEY } = require('../lib/overlay');
 const { getRedis } = require('../lib/redis');
 const { getPostHogRatings } = require('../lib/posthog');
+const { requireAuth } = require('../lib/auth');
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
@@ -126,6 +127,7 @@ function avgRating(ratings) {
 }
 
 module.exports = async function handler(req, res) {
+  if (!requireAuth(req, res)) return;
   try {
     const env = getEnv();
 
