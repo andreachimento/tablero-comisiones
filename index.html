@@ -1674,6 +1674,7 @@ function loadCertificacionesPerfil(email){
         return '<div class="cert-pend-item-perfil ' + (chk.semaforo === 'verde' ? 'semaforo-verde' : 'semaforo-rojo') + '">'
           + '<div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:12.5px;">' + escapeHtml(c.curso) + ' &middot; ' + rolLabel + '</div>'
           + '<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">Evaluacion rendida el ' + formatFechaCorta(c.fecha) + '</div>'
+          + (c.verificacion === 'indeterminado' ? '<div style="font-size:11px;color:var(--red);margin-top:2px;font-weight:600;">Al rendir no se pudo confirmar que ese mail sea una cuenta de Coderhouse - chequear antes de aprobar.</div>' : '')
           + '<div style="margin-top:6px;font-size:11px;">' + filas.join('') + '</div>'
           + '<div class="cert-pend-actions">'
           + '<button class="cert-btn aprobar" onclick="aprobarCertPerfil(\'' + c.id + '\')">&#10003; Aprobar</button>'
@@ -2666,8 +2667,15 @@ function renderCertRows(){
       acciones += ' <button class="bo-btn" onclick="habilitarDeNuevoCert(\'' + c.id + '\')">Habilitar de nuevo</button>';
     }
     const excepTag = c.esExcepcion ? ' <span style="background:var(--accent-light);color:var(--accent-dark);font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:999px;vertical-align:1px;">EXCEPCION</span>' : '';
+    // El sitio publico deja rendir aunque no haya podido confirmar contra el
+    // back office que la persona existe como cuenta de Coderhouse (prefiere
+    // eso a dejar afuera a un profesor real por una caida). Cuando pasa, se
+    // avisa aca: es el unico lugar donde alguien lo va a ver antes de aprobar.
+    const sinVerificarTag = c.verificacion === 'indeterminado'
+      ? ' <span title="Al rendir no se pudo confirmar que este mail sea una cuenta real de Coderhouse. Conviene chequearlo antes de aprobar." style="background:#fdecea;color:#9c0006;font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:999px;vertical-align:1px;cursor:help;">SIN VERIFICAR</span>'
+      : '';
     return '<tr>'
-      + '<td><span class="staff-name">' + escapeHtml(c.nombre || '') + '</span>' + excepTag + '<div style="font-size:10.5px;color:var(--ink-soft);">' + escapeHtml(c.email || '') + '</div></td>'
+      + '<td><span class="staff-name">' + escapeHtml(c.nombre || '') + '</span>' + excepTag + sinVerificarTag + '<div style="font-size:10.5px;color:var(--ink-soft);">' + escapeHtml(c.email || '') + '</div></td>'
       + '<td>' + escapeHtml(c.curso || '') + '</td>'
       + '<td>' + rolLabel + '</td>'
       + '<td style="font-weight:700;">' + (c.nota != null ? Number(c.nota).toFixed(1) : '-') + '/10</td>'
