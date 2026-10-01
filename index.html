@@ -1681,7 +1681,7 @@ function loadCertificacionesPerfil(email){
           + '</div></div>'
           + '<div style="font-weight:800;font-size:13px;white-space:nowrap;">' + Number(c.nota).toFixed(1) + '/10</div>'
           + '</div>';
-      }).join('') + '<div class="field-hint" style="margin-top:6px;">Al aprobar o desaprobar se agrega (o no) el curso al perfil y se dispara el mail con la decision.</div>';
+      }).join('') + '<div class="field-hint" style="margin-top:6px;">Al aprobar o desaprobar se agrega (o no) el curso al perfil y se dispara el mail con la decision. Si es de profesor, el curso ademas se carga en su perfil del Back Office.</div>';
     })
     .catch(err => {
       if(body) body.innerHTML = '<p style="font-size:12px;color:var(--red);">No se pudieron cargar las certificaciones: ' + escapeHtml(err.message) + '</p>';
@@ -2691,6 +2691,16 @@ function postCertAction(action, payload){
 // mail (resp.mail.enviado), en vez de asumir que siempre se mando - si
 // falta LOOPS_API_KEY en Vercel o Loops devuelve un error, se avisa en vez
 // de decir "se disparo el mail" sin haber pasado.
+// Que paso con el empuje al back office (ver lib/certificacionesBO.js). Se
+// dice siempre, tanto cuando se hizo como cuando no, porque un "no se pudo"
+// silencioso dejaria el perfil del back office desactualizado sin que nadie
+// se entere.
+function mensajeBackOffice(resp){
+  const bo = resp && resp.backoffice;
+  if(!bo) return '';
+  if(bo.empujado) return ' Tambien se cargo en su perfil del Back Office.';
+  return ' OJO: en el Back Office no se cargo (' + (bo.motivo || 'sin detalle') + ').';
+}
 function mensajeMail(resp){
   if(resp.cert && resp.cert.esExcepcion) return ' (no se envia mail: es un caso de excepcion/proceso de seleccion).';
   if(resp.mail && resp.mail.enviado) return ' Se envio el mail correspondiente.';
@@ -2699,7 +2709,7 @@ function mensajeMail(resp){
 function aprobarCert(id){
   postCertAction('aprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      showToast('Certificacion aprobada. Se agrego el curso al perfil.' + mensajeMail(resp), 5000);
+      showToast('Certificacion aprobada. Se agrego el curso al perfil.' + mensajeBackOffice(resp) + mensajeMail(resp), 8000);
       loadCertificaciones();
     }
     else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
@@ -2729,7 +2739,7 @@ function habilitarDeNuevoCert(id){
 function aprobarCertPerfil(id){
   postCertAction('aprobar', { id }).then(resp => {
     if(resp && resp.ok){
-      showToast('Certificacion aprobada. Se agrego el curso al perfil.' + mensajeMail(resp), 5000);
+      showToast('Certificacion aprobada. Se agrego el curso al perfil.' + mensajeBackOffice(resp) + mensajeMail(resp), 8000);
       if(currentStaffEmail) loadStaffProfile(currentStaffEmail);
     } else showToast('No se pudo aprobar: ' + ((resp && resp.error) || ''), 4000);
   });

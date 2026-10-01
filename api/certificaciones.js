@@ -20,6 +20,7 @@ const { getOverlay, setOverlay, personKey, getAccountsForPerson } = require('../
 const { getAllCertificaciones, saveCertificacion, getAllPreguntas, getPreguntas, savePreguntas, genId, getAllExcepciones, addExcepcion, quitarExcepcion } = require('../lib/certificaciones');
 const { getPostHogRatings } = require('../lib/posthog');
 const { enviarMailCertificacionAprobada, enviarMailCertificacionDesaprobada } = require('../lib/loops');
+const { empujarCertificacionAlBO } = require('../lib/certificacionesBO');
 const { requireAuth } = require('../lib/auth');
 
 const RATING_MINIMO = 4.7;
@@ -202,8 +203,14 @@ module.exports = async function handler(req, res) {
         if (!yaExiste) overlay.cursosHabilitados.push({ curso: cert.curso, rol: cert.rol });
         await setOverlay(key, overlay);
 
+        // Y, si es de profesor, tambien en el perfil de esa misma cuenta en el
+        // back office (la lista de "ver certificaciones"). Ver lib/certificacionesBO.js:
+        // nunca tira excepcion, asi que un problema alla no deja la
+        // certificacion sin aprobar aca.
+        const backoffice = await empujarCertificacionAlBO(cert);
+
         const mail = await enviarMailDecision(cert, 'aprobado');
-        res.status(200).json({ ok: true, cert, mail });
+        res.status(200).json({ ok: true, cert, mail, backoffice });
         return;
       }
       case 'desaprobar': {
