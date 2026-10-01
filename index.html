@@ -174,7 +174,13 @@
   .overall-rating .stars-big .filled { color: var(--amber); }
   .overall-rating .rating-num { font-size: 11px; color: var(--ink-soft); font-weight: 600; margin-top: 2px; }
 
+  /* min-width:0 en las columnas: sin eso, una columna de grid nunca se achica
+     por debajo del ancho de su contenido mas ancho. Alcanzaba con un
+     comentario que trajera una palabra larga sin espacios (o un enlace
+     pegado) para que la columna creciera, la grilla se pasara del ancho de la
+     pantalla y apareciera la barra de scroll horizontal en todo el perfil. */
   .grid-2 { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 18px; align-items: start; }
+  .grid-2 > * { min-width: 0; }
   @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
 
   .card { background: white; border-radius: 12px; border: 1px solid var(--line); padding: 18px 20px; margin-bottom: 18px; }
@@ -197,7 +203,7 @@
   .comment-item { padding: 10px 0; border-top: 1px solid var(--line-soft); }
   .comment-item:first-child { border-top: none; }
   .comment-meta { font-size: 10.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 3px; }
-  .comment-text { font-size: 12.5px; white-space: pre-wrap; }
+  .comment-text { font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .comment-edited { font-style: italic; font-weight: 400; }
   .comment-actions { margin-top: 5px; display: flex; gap: 12px; }
   .comment-action { font-size: 11px; color: var(--accent); cursor: pointer; font-weight: 600; }
