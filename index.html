@@ -1480,12 +1480,61 @@ function loadStaffList(){
     });
 }
 
+// Los nombres de curso de los perfiles son texto libre con historia: el mismo
+// curso quedo guardado con mayusculas distintas o sin tilde ("Administracion
+// de empresas" y "Administracion de Empresas"), y aparecia dos veces en los
+// desplegables. Esta clave sirve para tratarlos como uno solo.
+const CURSO_CONECTORES = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'en', 'para', 'con', 'a', 'al', 'o', 'u', 'e']);
+function claveCurso(t){
+  return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// De cada grupo de variantes se muestra UNA. Se elige por orden: la que mas
+// perfiles usan; si empatan, la que esta escrita con tildes (lo que se muestra
+// es lo que queda guardado al elegirlo, asi que conviene que sea la version
+// bien escrita); y recien ahi, alfabeticamente.
+//
+// No se "corrige" el nombre contra ninguna lista oficial a proposito: este
+// desplegable incluye cursos que no estan en esa lista (productos B2B como
+// "Adidas 1 | Microsoft 365 Copilot") y no hay que inventarles un nombre.
+function unificarNombresDeCurso(nombres, conteos){
+  const tildes = (t) => (String(t).normalize('NFD').match(/[\u0300-\u036f]/g) || []).length;
+  const mejor = (a, b) => {
+    const cA = (conteos && conteos[a]) || 0;
+    const cB = (conteos && conteos[b]) || 0;
+    if (cA !== cB) return cA > cB ? a : b;
+    const tA = tildes(a), tB = tildes(b);
+    if (tA !== tB) return tA > tB ? a : b;
+    // Y si siguen empatados, la que respeta como se escriben los nombres de
+    // curso en Coderhouse: cada palabra con mayuscula salvo las
+    // preposiciones y articulos ("Administracion de Empresas").
+    const mayus = (t) => String(t).split(/\s+/)
+      .filter(w => w && !CURSO_CONECTORES.has(w.toLowerCase()) && w[0] === w[0].toUpperCase() && w[0] !== w[0].toLowerCase())
+      .length;
+    const mA = mayus(a), mB = mayus(b);
+    if (mA !== mB) return mA > mB ? a : b;
+    return a.localeCompare(b, 'es') <= 0 ? a : b;
+  };
+  const porClave = new Map();
+  (nombres || []).forEach(n => {
+    const k = claveCurso(n);
+    if (!k) return;
+    const previa = porClave.get(k);
+    porClave.set(k, previa ? mejor(n, previa) : n);
+  });
+  return Array.from(porClave.values()).sort((a, b) => a.localeCompare(b, 'es'));
+}
+
 function buildStaffCourseFilter(){
   const sel = document.getElementById('fCurso');
   const current = sel.value;
   const cursos = new Set();
-  STAFF.forEach(p => (p.cursosHabilitados || []).forEach(c => cursos.add(c.curso)));
-  allCourseNames = Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
+  const conteos = {};
+  STAFF.forEach(p => (p.cursosHabilitados || []).forEach(c => {
+    cursos.add(c.curso);
+    conteos[c.curso] = (conteos[c.curso] || 0) + 1;
+  }));
+  allCourseNames = unificarNombresDeCurso(Array.from(cursos), conteos);
   sel.innerHTML = '<option value="">Todos los cursos</option>' + allCourseNames.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">' + c + '</option>').join('');
   sel.value = current;
   rebuildCursoDatalist();
@@ -1502,7 +1551,10 @@ function buildStaffCourseFilter(){
 function rebuildCursoDatalist(){
   const cursos = new Set(allCourseNames || []);
   (typeof certCourseNames === 'function' ? certCourseNames() : []).forEach(c => cursos.add(c));
-  const list = Array.from(cursos).sort((a, b) => a.localeCompare(b, 'es'));
+  // Se unifican las variantes del mismo nombre (ver claveCurso): sin esto el
+  // desplegable mostraba el mismo curso dos veces y era cuestion de suerte
+  // cual se elegia, lo que a su vez generaba mas variantes guardadas.
+  const list = unificarNombresDeCurso(Array.from(cursos));
   document.getElementById('cursoDatalist').innerHTML = list.map(c => '<option value="' + c.replace(/"/g, '&quot;') + '">').join('');
 }
 
@@ -1531,7 +1583,10 @@ function applyStaffFilters(){
     if(nombre && !p.nombre.toLowerCase().includes(nombre)) return false;
     if(mail && !p.email.toLowerCase().includes(mail)) return false;
     if(rol && !(p.roles || []).includes(rol)) return false;
-    if(curso && !(p.cursosHabilitados || []).some(c => c.curso === curso)) return false;
+    // Se compara por claveCurso y no por texto exacto: el desplegable ahora
+    // muestra una sola variante de cada nombre, asi que un === dejaria afuera
+    // a quien lo tenga guardado con otra mayuscula o sin tilde.
+    if(curso && !(p.cursosHabilitados || []).some(c => claveCurso(c.curso) === claveCurso(curso))) return false;
     if(estado && p.estado !== estado && !(estado === 'despido' && p.estado === 'desaprobado')) return false;
     if(diaDisponible && !((p.disponibilidad && p.disponibilidad.dias) || []).includes(diaDisponible)) return false;
     if(horarioDisponible && !((p.disponibilidad && p.disponibilidad.franjas) || []).includes(horarioDisponible)) return false;
