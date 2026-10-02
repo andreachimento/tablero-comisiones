@@ -1822,6 +1822,7 @@ function renderStaffProfile(p){
     + '<input type="text" id="newCursoNombre" list="cursoDatalist" placeholder="Nombre del curso..." style="flex:1;min-width:160px;">'
     + '<select id="newCursoRol"><option value="profesor">Profesor</option><option value="tutor">Tutor Adjunto</option></select>'
     + '<button class="btn-add" style="margin-top:0;" onclick="addStaffCurso()">+ Agregar</button>'
+    + '<div class="field-hint" style="flex-basis:100%;margin-top:6px;">Si lo agregas como Profesor, el curso ademas se carga en "ver certificaciones" de su perfil del Back Office. Como Tutor Adjunto no se toca el Back Office.</div>'
     + '</div><div>';
   const cursos = p.cursosHabilitados || [];
   // Dos secciones (Profesor / TA), cada curso como una burbuja chica en vez
@@ -2086,7 +2087,13 @@ function addStaffCurso(){
   const rol = document.getElementById('newCursoRol').value;
   if(!nombre){ showToast('Escribi el nombre del curso.', 2500); return; }
   postStaffUpdate('addCurso', { curso: nombre, rol: rol }).then(resp => {
-    if(resp && resp.ok) loadStaffProfile(currentStaffEmail);
+    if(resp && resp.ok){
+      // Se avisa siempre que paso del lado del Back Office (se cargo o por que
+      // no), igual que al aprobar una certificacion: un "no se pudo" silencioso
+      // dejaria el perfil de alla desactualizado sin que nadie se entere.
+      showToast('Curso agregado al perfil.' + mensajeBackOffice(resp), 8000);
+      loadStaffProfile(currentStaffEmail);
+    }
     else showToast('No se pudo agregar el curso: ' + ((resp && resp.error) || ''), 4000);
   });
 }

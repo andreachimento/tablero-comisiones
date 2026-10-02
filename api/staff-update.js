@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const { getOverlay, setOverlay } = require('../lib/overlay');
 const { requireAuth } = require('../lib/auth');
+const { empujarCursoHabilitadoAlBO } = require('../lib/certificacionesBO');
 // Sincronizacion con el CRM de Relaciones Laborales de Notion (accion
 // 'syncNotionComments' mas abajo). Vive ACA adentro (y no en su propio
 // archivo api/staff-comments-sync.js, como se penso originalmente) para no
@@ -46,6 +47,9 @@ module.exports = async function handler(req, res) {
     const email = String(body.email || '').toLowerCase().trim();
     const action = body.action;
     const payload = body.payload || {};
+    // Lo que paso del lado del back office, cuando la accion lo toca. Queda
+    // en null para todas las demas acciones.
+    let backoffice = null;
 
     if (!email || !action) {
       res.status(400).json({ error: 'Faltan los campos email o action' });
@@ -124,6 +128,12 @@ module.exports = async function handler(req, res) {
         }
         const yaExiste = overlay.cursosHabilitados.some(c => c.curso.toLowerCase() === curso.toLowerCase() && c.rol === rol);
         if (!yaExiste) overlay.cursosHabilitados.push({ curso, rol });
+        // Y, si se cargo como Profesor, tambien en "ver certificaciones" del
+        // perfil de esa persona en el back office (ver lib/certificacionesBO.js).
+        // El rol que se elige aca es lo unico que decide si sube: Tutor
+        // Adjunto no se empuja. Nunca tira excepcion, asi que un problema
+        // alla no impide que el curso quede cargado en el tablero.
+        backoffice = await empujarCursoHabilitadoAlBO({ personKey: email, curso, rol });
         break;
       }
       case 'removeCurso': {
@@ -231,7 +241,7 @@ module.exports = async function handler(req, res) {
     }
 
     await setOverlay(email, overlay);
-    res.status(200).json({ ok: true, overlay });
+    res.status(200).json({ ok: true, overlay, backoffice });
   } catch (err) {
     res.status(200).json({ error: String(err && err.message ? err.message : err) });
   }
