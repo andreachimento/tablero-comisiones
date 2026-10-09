@@ -1036,7 +1036,7 @@ function initCobControles(){
   if(b && !b.options.length) b.innerHTML = cobOpcionesEstado('resuelto');
 }
 const COB_REFRESH_MS = 2 * 60 * 1000;
-const COB_ESTADO = { SEARCHING: 'Buscando candidatos', OFFERED: 'Ofrecida a candidatos', PENDING_SIGNATURE: 'Firma pendiente', MANUAL: 'Gestión manual', FILLED: 'Cubierta', EXPIRED: 'Vencida en BO', CANCELLED: 'Cancelada' };
+const COB_ESTADO = { SEARCHING: 'Buscando candidatos', OFFERED: 'Ofrecida a candidatos', PENDING_SIGNATURE: 'Firma pendiente', MANUAL: 'Gestión manual', FILLED: 'Cubierta', EXPIRED: 'Vencida en BO', CANCELLED: 'Cancelada', SIN_BO: 'Sin cargar en BO' };
 const COB_TIPO = { suplencia: 'Suplencia', reemplazo: 'Reemplazo', baja: 'Baja' };
 const COB_DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 function cobFechaTxt(iso, conHora){
@@ -1045,6 +1045,15 @@ function cobFechaTxt(iso, conHora){
   const p = {}; new Intl.DateTimeFormat('en-GB',{timeZone:'America/Argentina/Buenos_Aires',weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d).forEach(x=>p[x.type]=x.value);
   const wd = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[p.weekday];
   return COB_DIAS[wd] + ' ' + p.day + '/' + p.month + (conHora ? ' ' + (p.hour==='24'?'00':p.hour) + ':' + p.minute : '');
+}
+function cobOrigenes(f){ return Array.isArray(f.origenes) && f.origenes.length ? f.origenes : [{ tipo: 'bo' }]; }
+function cobOrigenHtml(f){
+  const vistos = new Set();
+  return cobOrigenes(f).filter(o => { const k = o.tipo + (o.canal || '') + (o.conv || ''); if(vistos.has(k)) return false; vistos.add(k); return true; }).map(o => {
+    if(o.tipo === 'bo') return '<span class="cob-alert info" style="margin-bottom:3px;">BO</span>';
+    const txt = o.tipo === 'intercom' ? 'Intercom' : 'Slack ' + escapeHtml(o.canal || '');
+    return '<a class="cob-alert ' + (o.tipo === 'intercom' ? 'ok' : 'warn') + '" style="text-decoration:none;margin-bottom:3px;" href="' + escapeHtml(o.link || '#') + '" target="_blank" rel="noopener" title="Abrir el mensaje">' + txt + ' &#8599;</a>';
+  }).join('<br>');
 }
 function cobPendiente(f){ return !['FILLED','CANCELLED'].includes(f.estadoBO); }
 // Alertas de un pedido (solo mientras siga sin cubrir y no este marcado como resuelto en el tablero).
@@ -1059,7 +1068,8 @@ function cobAlertas(f){
   if(falta < 0) out.push({k:'vencido', c:'crit', t: f.tipo==='suplencia' ? 'La clase ya pasó sin cubrir' : 'Fecha pasada sin cubrir'});
   else if(falta < 24*3600e3) out.push({k:'urgente', c:'crit', t:'Menos de 24 h'});
   else if(falta < 72*3600e3) out.push({k:'pronto', c:'warn', t:'Menos de 3 días'});
-  if(!f.candidatos.ofrecidas && !f.cubre) out.push({k:'sincand', c: falta < 72*3600e3 ? 'crit' : 'warn', t: f.candidatos.total ? 'Sin candidatos activos' : 'Sin candidatos'});
+  if(f.estadoBO === 'SIN_BO') out.push({k:'sinbo', c:'warn', t:'Entró por Slack/Intercom, no está en el BO'});
+  else if(!f.candidatos.ofrecidas && !f.cubre) out.push({k:'sincand', c: falta < 72*3600e3 ? 'crit' : 'warn', t: f.candidatos.total ? 'Sin candidatos activos' : 'Sin candidatos'});
   if(seg && (seg.estado==='gestion' || seg.estado==='esperando')) out.push({k:'gestion', c:'info', t: COB_SEG[seg.estado]});
   return out;
 }
@@ -1070,7 +1080,7 @@ function loadCoberturas(auto, force){
     .then(d => {
       if(!d || (d.error && !d.filas)){ COB.error = (d && d.error) || 'error desconocido'; if(!COB.cargado) document.getElementById('cobTbody').innerHTML = '<tr><td colspan="20" style="text-align:center;padding:30px;color:var(--red);">No se pudieron cargar los pedidos: ' + escapeHtml(COB.error) + '</td></tr>'; return; }
       COB.error = d.error || '';
-      COB.filas = d.filas || []; COB.seg = d.seguimiento || {}; COB.updatedAt = d.updatedAt;
+      COB.filas = d.filas || []; COB.seg = d.seguimiento || {}; COB.updatedAt = d.updatedAt; COB.canales = d.canales || null;
       // Aviso de pedidos nuevos (desde la ultima consulta, no en la primera carga).
       const ids = new Set(COB.filas.map(f => f.id));
       if(COB.vistos){
@@ -1170,6 +1180,7 @@ function renderCoberturas(){
     const C = {
       estado: '<td>' + estHtml + '</td>',
       alerta: '<td class="cob-alertas">' + (cobAlertas(f).map(a => '<span class="cob-alert ' + a.c + '">' + a.t + '</span>').join('') || '<span class="tag-no">-</span>') + '</td>',
+      origen: '<td>' + cobOrigenHtml(f) + '</td>',
       tipo: '<td class="cob-tipo"><span class="cob-tipo-tag ' + f.tipo + '">' + COB_TIPO[f.tipo] + '</span><div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">' + (f.tipo==='suplencia' ? 'Días puntuales' : 'Definitivo') + '</div></td>',
       com: '<td>' + (f.com ? '<span class="commission" onclick="openBackOffice(\'' + f.cohortId + '\')" title="Ver esta comisión en Back Office">' + f.com + '</span>' : '-') + '</td>',
       curso: '<td class="course-name">' + escapeHtml(f.curso) + (f.dias && f.dias.length ? '<div style="font-size:11px;color:var(--ink-soft);font-weight:500;">' + f.dias.map(d => COB_DIAS[d % 7]).join('/') + ' ' + escapeHtml(f.horario) + '</div>' : '') + '</td>',
@@ -1188,7 +1199,8 @@ function renderCoberturas(){
       + '</tr>';
   }).join('');
   const at = COB.updatedAt ? new Date(COB.updatedAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-  document.getElementById('cobNota').textContent = 'Datos del back office del ' + at + '. Suplencia: clases puntuales. Reemplazo: el staff deja una comisión en curso, desde la fecha indicada hasta el final. Baja: el staff deja una comisión que todavía no empezó. Reemplazos y bajas son definitivos. El tablero cierra solo los pedidos que el BO ya muestra resueltos (reemplazo cargado, fecha pasada, comisión cancelada o finalizada, pedidos duplicados) y los marca como "Automático (BO)" con el motivo; si alguien cambia el estado a mano, se respeta lo que puso. Las alertas se apagan cuando el pedido se cubre en el BO o cuando el caso se marca como Resuelto o Descartado acá (se puede cambiar de a uno desde la columna Estado del caso, o tildar varios y cambiarlos juntos).' + (COB.error ? ' Última consulta con error: ' + COB.error : '');
+  document.getElementById('cobNota').textContent = 'Datos del back office del ' + at + '. Suplencia: clases puntuales. Reemplazo: el staff deja una comisión en curso, desde la fecha indicada hasta el final. Baja: el staff deja una comisión que todavía no empezó. Reemplazos y bajas son definitivos. El tablero cierra solo los pedidos que el BO ya muestra resueltos (reemplazo cargado, fecha pasada, comisión cancelada o finalizada, pedidos duplicados) y los marca como "Automático (BO)" con el motivo; si alguien cambia el estado a mano, se respeta lo que puso. Las alertas se apagan cuando el pedido se cubre en el BO o cuando el caso se marca como Resuelto o Descartado acá (se puede cambiar de a uno desde la columna Estado del caso, o tildar varios y cambiarlos juntos).' + (COB.error ? ' Última consulta con error: ' + COB.error : '')
+    + (COB.canales && COB.canales.conectado ? ' Slack conectado (' + (COB.canales.canales || []).join(', ') + '): los pedidos que entran por ahí o por Intercom se suman a la fila del BO si es el mismo pedido, o aparecen como "Sin cargar en BO".' + (COB.canales.error ? ' Aviso de Slack: ' + COB.canales.error : '') : ' Slack todavía no está conectado (falta el acceso del bot en Vercel).');
 }
 function cobFormSeg(f, seg){
   const por = cobPor() || (seg && seg.por) || '';
@@ -1205,6 +1217,7 @@ const COB_COLS = {
   estado:   { label: 'Estado del caso', w: 170, val: f => COB_SEG[(COB.seg[f.id] && COB.seg[f.id].estado) || ''], sort: f => Object.keys(COB_SEG).indexOf((COB.seg[f.id] && COB.seg[f.id].estado) || '') },
   alerta:   { label: 'Alerta', w: 170, vals: f => { const a = cobAlertas(f).map(x => x.t); return a.length ? a : ['(sin alerta)']; }, sort: f => ({crit:0, warn:1, '':2})[cobNivel(f)] },
   tipo:     { label: 'Tipo', w: 110, val: f => COB_TIPO[f.tipo] },
+  origen:   { label: 'Entró por', w: 150, vals: f => { const o = cobOrigenes(f).map(x => x.tipo === 'bo' ? 'BO' : x.tipo === 'intercom' ? 'Intercom' : 'Slack ' + x.canal); return o.length ? [...new Set(o)] : ['BO']; } },
   com:      { label: 'Comisión', w: 115, val: f => f.com ? String(f.com) : '(vacío)', sort: f => Number(f.com) || 0 },
   curso:    { label: 'Curso', w: 220, val: f => f.curso || '(vacío)' },
   rol:      { label: 'Rol', w: 90, val: f => f.rol ? (/TUTOR/i.test(f.rol) ? 'Tutor' : 'Profesor') : '(vacío)' },
