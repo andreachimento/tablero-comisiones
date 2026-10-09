@@ -1165,6 +1165,7 @@ function renderCoberturas(){
       : (seg && seg.nota ? '<div style="font-size:11.5px;">' + escapeHtml(seg.nota) + '</div>' : '')
         + '<button class="bo-btn" style="margin-top:4px;" onclick="abrirSegCob(\'' + f.id + '\')">' + (seg && seg.nota ? 'Editar nota' : 'Agregar nota') + '</button>';
     const estHtml = '<select class="cob-estado-sel e-' + (est || 'sin') + '" onchange="cambiarEstadoCob(\'' + f.id + '\', this.value, this)">' + cobOpcionesEstado(est) + '</select>'
+      + (seg && seg.auto ? '<div style="font-size:11px;margin-top:4px;color:var(--ink);line-height:1.35;">' + escapeHtml(seg.nota || '') + '</div>' : '')
       + (seg && seg.por ? '<div style="color:var(--ink-soft);font-size:10.5px;margin-top:3px;">' + escapeHtml(seg.por) + ' · ' + new Date(seg.at).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) + '</div>' : '');
     const C = {
       estado: '<td>' + estHtml + '</td>',
@@ -1187,7 +1188,7 @@ function renderCoberturas(){
       + '</tr>';
   }).join('');
   const at = COB.updatedAt ? new Date(COB.updatedAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-  document.getElementById('cobNota').textContent = 'Datos del back office del ' + at + '. Suplencia: clases puntuales. Reemplazo: el staff deja una comisión en curso, desde la fecha indicada hasta el final. Baja: el staff deja una comisión que todavía no empezó. Reemplazos y bajas son definitivos. Las alertas se apagan cuando el pedido se cubre en el BO o cuando el caso se marca como Resuelto o Descartado acá (se puede cambiar de a uno desde la columna Estado del caso, o tildar varios y cambiarlos juntos).' + (COB.error ? ' Última consulta con error: ' + COB.error : '');
+  document.getElementById('cobNota').textContent = 'Datos del back office del ' + at + '. Suplencia: clases puntuales. Reemplazo: el staff deja una comisión en curso, desde la fecha indicada hasta el final. Baja: el staff deja una comisión que todavía no empezó. Reemplazos y bajas son definitivos. El tablero cierra solo los pedidos que el BO ya muestra resueltos (reemplazo cargado, fecha pasada, comisión cancelada o finalizada, pedidos duplicados) y los marca como "Automático (BO)" con el motivo; si alguien cambia el estado a mano, se respeta lo que puso. Las alertas se apagan cuando el pedido se cubre en el BO o cuando el caso se marca como Resuelto o Descartado acá (se puede cambiar de a uno desde la columna Estado del caso, o tildar varios y cambiarlos juntos).' + (COB.error ? ' Última consulta con error: ' + COB.error : '');
 }
 function cobFormSeg(f, seg){
   const por = cobPor() || (seg && seg.por) || '';

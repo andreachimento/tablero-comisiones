@@ -54,6 +54,18 @@
     {
       "path": "/api/disponibilidad-sync",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/dashboard-data?vista=coberturas&cron=1",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/dashboard-data?vista=coberturas&cron=1",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/dashboard-data?vista=coberturas&cron=1",
+      "schedule": "0 20 * * *"
     }
   ]
 }

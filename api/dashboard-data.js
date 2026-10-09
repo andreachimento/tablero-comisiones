@@ -313,6 +313,13 @@ async function buildRows() {
 //           ?force=1 la rehace.
 //   POST -> { accion: 'seguimiento', id | ids[], estado: 'gestion'|'esperando'|'resuelto'|'descartado'|'',
 //           nota, por } guarda el seguimiento interno de un pedido.
+//   GET ?cron=1 (tareas programadas de Vercel) -> consulta el BO y aplica los
+//           cierres automaticos aunque nadie tenga el tablero abierto.
+// Cierre automatico: cada vez que se consulta el BO, los pedidos que el BO ya
+// muestra resueltos (reemplazo cargado, fecha pasada, comision cancelada,
+// duplicados; ver lib/coberturas.js) se marcan solos con el motivo y
+// "Automatico (BO)". Nunca se pisa lo que marco una persona, y si la condicion
+// deja de cumplirse el cierre automatico se borra y el pedido vuelve a abrirse.
 // ----------------------------------------------------------------------------
 const COB_CACHE_MS = 2 * 60 * 1000;
 async function handleCoberturas(req, res) {
@@ -345,6 +352,29 @@ async function handleCoberturas(req, res) {
     if (Object.keys(poner).length) await redis.hset('coberturas:seguimiento', poner);
     return res.status(200).json({ ok: true, seguimiento: await leerSeg() });
   }
+  const aplicarCierres = async (d) => {
+    if (!redis || !d || !Array.isArray(d.filas)) return 0;
+    const prev = await leerSeg();
+    const poner = {}, borrar = [];
+    d.filas.forEach(f => {
+      const s = prev[f.id];
+      const a = f.autoCierre;
+      if (a && (!s || (s.auto && (s.estado !== a.estado || s.nota !== a.motivo))))
+        poner[f.id] = JSON.stringify({ estado: a.estado, nota: a.motivo, por: 'Automático (BO)', at: new Date().toISOString(), auto: true });
+      else if (!a && s && s.auto && !['FILLED', 'CANCELLED'].includes(f.estadoBO)) borrar.push(f.id);
+    });
+    if (Object.keys(poner).length) await redis.hset('coberturas:seguimiento', poner);
+    if (borrar.length) await redis.hdel('coberturas:seguimiento', ...borrar);
+    return Object.keys(poner).length + borrar.length;
+  };
+  const auth = req.headers && req.headers.authorization;
+  const esCron = req.query && req.query.cron === '1' && !!process.env.CRON_SECRET && auth === 'Bearer ' + process.env.CRON_SECRET;
+  if (esCron) {
+    const d = await fetchCoberturas();
+    if (redis) { try { await redis.set('coberturas:cache', d); } catch (e) {} }
+    const cambios = await aplicarCierres(d);
+    return res.status(200).json({ ok: true, pedidos: d.filas.length, cambios });
+  }
   const force = req.query && (req.query.force === '1' || req.query.force === 'true');
   let data = null;
   if (redis && !force) {
@@ -354,6 +384,7 @@ async function handleCoberturas(req, res) {
     try {
       data = await fetchCoberturas();
       if (redis) { try { await redis.set('coberturas:cache', data); } catch (e) {} }
+      try { await aplicarCierres(data); } catch (e) { /* si falla, se reintenta en la proxima consulta */ }
     } catch (err) {
       let viejo = null; if (redis) { try { viejo = await redis.get('coberturas:cache'); } catch (e) {} }
       if (viejo) data = Object.assign({}, viejo, { error: String(err && err.message ? err.message : err) });
