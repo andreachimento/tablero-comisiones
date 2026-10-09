@@ -303,8 +303,63 @@ async function buildRows() {
   };
 }
 
+// ----------------------------------------------------------------------------
+// Pestaña "Reemplazos y suplencias": /api/dashboard-data?vista=coberturas
+// Vive en esta misma funcion (y no en un archivo nuevo de /api) porque el plan
+// Hobby de Vercel de este proyecto ya esta en el tope de 12 funciones.
+//   GET  -> pedidos de suplencia y reemplazo del BO + seguimiento interno.
+//           Se guarda una copia de 2 minutos en la base para que varias
+//           personas mirando a la vez no multipliquen las consultas al BO;
+//           ?force=1 la rehace.
+//   POST -> { accion: 'seguimiento', id, estado: 'gestion'|'resuelto'|'',
+//           nota, por } guarda el seguimiento interno de un pedido.
+// ----------------------------------------------------------------------------
+const COB_CACHE_MS = 2 * 60 * 1000;
+async function handleCoberturas(req, res) {
+  const { getRedis } = require('../lib/redis');
+  const { fetchCoberturas } = require('../lib/coberturas');
+  res.setHeader('Cache-Control', 'no-store');
+  let redis = null;
+  try { redis = getRedis(); } catch (e) { /* sin base: se trae en vivo y sin seguimiento */ }
+  const leerSeg = async () => {
+    if (!redis) return {};
+    const h = (await redis.hgetall('coberturas:seguimiento')) || {};
+    const o = {}; Object.entries(h).forEach(([k, v]) => { try { o[k] = typeof v === 'string' ? JSON.parse(v) : v; } catch (e) {} });
+    return o;
+  };
+  if (req.method === 'POST') {
+    const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    if (b.accion !== 'seguimiento' || !/^[0-9a-f-]{36}$/i.test(String(b.id || ''))) return res.status(400).json({ error: 'pedido invalido' });
+    if (!redis) return res.status(500).json({ error: 'Falta la base de datos para guardar el seguimiento.' });
+    const estado = ['gestion', 'resuelto'].includes(b.estado) ? b.estado : '';
+    if (!estado && !String(b.nota || '').trim()) await redis.hdel('coberturas:seguimiento', b.id);
+    else await redis.hset('coberturas:seguimiento', { [b.id]: JSON.stringify({ estado, nota: String(b.nota || '').slice(0, 1000), por: String(b.por || '').slice(0, 80), at: new Date().toISOString() }) });
+    return res.status(200).json({ ok: true, seguimiento: await leerSeg() });
+  }
+  const force = req.query && (req.query.force === '1' || req.query.force === 'true');
+  let data = null;
+  if (redis && !force) {
+    try { const c = await redis.get('coberturas:cache'); if (c && Date.now() - new Date(c.updatedAt).getTime() < COB_CACHE_MS) data = c; } catch (e) {}
+  }
+  if (!data) {
+    try {
+      data = await fetchCoberturas();
+      if (redis) { try { await redis.set('coberturas:cache', data); } catch (e) {} }
+    } catch (err) {
+      let viejo = null; if (redis) { try { viejo = await redis.get('coberturas:cache'); } catch (e) {} }
+      if (viejo) data = Object.assign({}, viejo, { error: String(err && err.message ? err.message : err) });
+      else return res.status(200).json({ error: String(err && err.message ? err.message : err) });
+    }
+  }
+  return res.status(200).json(Object.assign({}, data, { seguimiento: await leerSeg() }));
+}
+
 module.exports = async function handler(req, res) {
   if (!requireAuth(req, res)) return;
+  if (req.query && req.query.vista === 'coberturas') {
+    try { return await handleCoberturas(req, res); }
+    catch (err) { return res.status(200).json({ error: String(err && err.message ? err.message : err) }); }
+  }
   try {
     const data = await buildRows();
     res.status(200).json(data);

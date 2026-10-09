@@ -132,6 +132,21 @@
   .tabs { display: flex; gap: 4px; padding: 0 26px; border-bottom: 3px solid var(--accent); background: white; }
   .tab { padding: 10px 20px; font-weight: 700; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; border-radius: 8px 8px 0 0; }
   .tab.active { background: var(--accent); color: white; }
+  .tab .tab-badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 6px; border-radius: 999px; background: var(--red); color: white; font-size: 10.5px; text-align: center; }
+  .tab.active .tab-badge { background: white; color: var(--red); }
+  .cob-alert { display: inline-block; border-radius: 999px; padding: 3px 9px; font-size: 10.5px; font-weight: 700; margin: 1px 2px 1px 0; white-space: nowrap; }
+  .cob-alert.crit { background: var(--red-bg); color: var(--red); }
+  .cob-alert.warn { background: var(--amber-bg); color: var(--amber); }
+  .cob-alert.info { background: var(--accent-light); color: var(--accent-dark); }
+  .cob-alert.ok { background: var(--green-bg); color: var(--green); }
+  .cob-tipo { font-weight: 700; font-size: 11.5px; }
+  .cob-motivo { white-space: normal; min-width: 200px; max-width: 300px; font-size: 12px; color: var(--ink-soft); }
+  .cob-motivo div { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .cob-alertas { white-space: normal; max-width: 170px; }
+  .cob-fechas { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.cob-crit td:first-child { box-shadow: inset 4px 0 0 var(--red); }
+  tr.cob-warn td:first-child { box-shadow: inset 4px 0 0 var(--amber); }
+  .cob-seg textarea { width: 100%; min-height: 48px; font-family: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
   .page { padding-top: 18px; }
   .hidden { display: none !important; }
 
@@ -462,6 +477,7 @@
   <div class="tab" id="tab-staff" onclick="showTab('staff')">Staff</div>
   <div class="tab" id="tab-diplomas" onclick="showTab('diplomas')">Diplomaturas</div>
   <div class="tab" id="tab-certificaciones" onclick="showTab('certificaciones')">Certificaciones</div>
+  <div class="tab" id="tab-coberturas" onclick="showTab('coberturas')">Reemplazos y suplencias<span class="tab-badge" id="cobTabBadge" style="display:none"></span></div>
 </div>
 
 <div class="page" id="pageComisiones">
@@ -637,6 +653,52 @@
 
 </div><!-- /pageCertificaciones -->
 
+<!-- ======================= REEMPLAZOS Y SUPLENCIAS ======================= -->
+<div class="page hidden" id="pageCoberturas">
+  <h2 class="section-title">Reemplazos y suplencias</h2>
+  <p class="section-sub">Pedidos que carga el staff en el back office cuando no puede dar una clase (suplencia) o deja una comisión (reemplazo / baja). Se actualiza solo cada 2 minutos.</p>
+
+  <div class="stats" id="statsCob"></div>
+
+  <div class="controls">
+    <input type="text" id="fCobBuscar" placeholder="Buscar por comisión, curso o persona..." oninput="renderCoberturas()">
+    <span class="filter-label">Tipo</span>
+    <select id="fCobTipo" onchange="renderCoberturas()">
+      <option value="">Todos</option>
+      <option value="suplencia">Suplencia</option>
+      <option value="reemplazo">Reemplazo / baja</option>
+    </select>
+    <span class="filter-label">Estado</span>
+    <select id="fCobEstado" onchange="renderCoberturas()">
+      <option value="pendientes">Pendientes de cubrir</option>
+      <option value="cubiertas">Cubiertas</option>
+      <option value="canceladas">Canceladas</option>
+      <option value="">Todas</option>
+    </select>
+    <span class="filter-label">Alerta</span>
+    <select id="fCobAlerta" onchange="renderCoberturas()">
+      <option value="">Todas</option>
+      <option value="urgente">Urgentes (menos de 24 h)</option>
+      <option value="vencido">Fecha pasada sin cubrir</option>
+      <option value="pronto">Próximos 3 días</option>
+      <option value="sincand">Sin candidatos</option>
+      <option value="nuevo">Nuevos (últimas 24 h)</option>
+    </select>
+    <label class="filter-checkbox"><input type="checkbox" id="fCobOcultarRes" checked onchange="renderCoberturas()"> Ocultar resueltos en el tablero</label>
+    <button class="clear-btn" onclick="limpiarFiltrosCob()">&#10005; Limpiar filtros</button>
+    <span class="result-count" id="cobCount"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Alerta</th><th>Tipo</th><th>Comisión</th><th>Curso</th><th>Rol</th><th>Pidió</th><th>Fecha a cubrir</th><th>Motivo</th><th>Pedido el</th><th>Estado en BO</th><th>Candidatos</th><th>Seguimiento</th></tr></thead>
+      <tbody id="cobTbody"><tr class="loading-row"><td colspan="12"><span class="spinner"></span>Cargando pedidos desde el back office...</td></tr></tbody>
+    </table>
+    <div id="cob-no-results" class="no-results" style="display:none">No hay pedidos con esos filtros.</div>
+  </div>
+  <p class="section-sub" id="cobNota" style="margin-top:10px;"></p>
+</div><!-- /pageCoberturas -->
+
 <!-- ======================= CERTIFICACIONES: gestionar preguntas (modal) ======================= -->
 <div class="modal-overlay hidden" id="preguntasModalOverlay">
   <div class="modal-box" style="width:min(760px,100%);">
@@ -791,6 +853,7 @@ async function entrarAlTablero(){
 function arrancarTablero(){
   buildHeader();
   loadData();
+  loadCoberturas(true);
 }
 
 let DATA = [];
@@ -900,6 +963,161 @@ document.getElementById('tbody').addEventListener('click', function(e){
   const r = lastRenderedRows[idx];
   if(r) copyComisionInfo(r);
 });
+
+// ======================= REEMPLAZOS Y SUPLENCIAS =======================
+// Los pedidos se traen apenas se entra al tablero y despues cada 2 minutos,
+// aunque no se este mirando esta pestaña: asi el numero rojo de la pestaña y
+// los avisos de pedidos nuevos llegan aunque se este trabajando en otra.
+const COB = { cargado: false, filas: [], seg: {}, vistos: null, abierto: null, updatedAt: null, error: '' };
+const COB_REFRESH_MS = 2 * 60 * 1000;
+const COB_ESTADO = { SEARCHING: 'Buscando candidatos', OFFERED: 'Ofrecida a candidatos', PENDING_SIGNATURE: 'Firma pendiente', MANUAL: 'Gestión manual', FILLED: 'Cubierta', EXPIRED: 'Vencida en BO', CANCELLED: 'Cancelada' };
+const COB_DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+function cobFechaTxt(iso, conHora){
+  if(!iso) return '';
+  const d = new Date(iso);
+  const p = {}; new Intl.DateTimeFormat('en-GB',{timeZone:'America/Argentina/Buenos_Aires',weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d).forEach(x=>p[x.type]=x.value);
+  const wd = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[p.weekday];
+  return COB_DIAS[wd] + ' ' + p.day + '/' + p.month + (conHora ? ' ' + (p.hour==='24'?'00':p.hour) + ':' + p.minute : '');
+}
+function cobPendiente(f){ return !['FILLED','CANCELLED'].includes(f.estadoBO); }
+// Alertas de un pedido (solo mientras siga sin cubrir y no este marcado como resuelto en el tablero).
+function cobAlertas(f){
+  const out = [];
+  const seg = COB.seg[f.id];
+  const ahora = Date.now();
+  if(ahora - new Date(f.pedidoAt).getTime() < 24*3600e3) out.push({k:'nuevo', c:'info', t:'Nuevo'});
+  if(!cobPendiente(f)){ if(f.estadoBO==='FILLED') out.push({k:'ok', c:'ok', t:'Cubierta'}); return out; }
+  if(seg && seg.estado==='resuelto'){ out.push({k:'ok', c:'ok', t:'Resuelto en el tablero'}); return out; }
+  const falta = new Date(f.desde).getTime() - ahora;
+  if(falta < 0) out.push({k:'vencido', c:'crit', t: f.tipo==='suplencia' ? 'La clase ya pasó sin cubrir' : 'Ya debía empezar el reemplazo'});
+  else if(falta < 24*3600e3) out.push({k:'urgente', c:'crit', t:'Menos de 24 h'});
+  else if(falta < 72*3600e3) out.push({k:'pronto', c:'warn', t:'Menos de 3 días'});
+  if(!f.candidatos.ofrecidas && !f.cubre) out.push({k:'sincand', c: falta < 72*3600e3 ? 'crit' : 'warn', t: f.candidatos.total ? 'Sin candidatos activos' : 'Sin candidatos'});
+  if(seg && seg.estado==='gestion') out.push({k:'gestion', c:'info', t:'En gestión'});
+  return out;
+}
+function cobNivel(f){ const a = cobAlertas(f); return a.some(x=>x.c==='crit') ? 'crit' : a.some(x=>x.c==='warn') ? 'warn' : ''; }
+function loadCoberturas(auto, force){
+  return fetch('/api/dashboard-data?vista=coberturas' + (force ? '&force=1' : ''))
+    .then(r => r.json())
+    .then(d => {
+      if(!d || (d.error && !d.filas)){ COB.error = (d && d.error) || 'error desconocido'; if(!COB.cargado) document.getElementById('cobTbody').innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--red);">No se pudieron cargar los pedidos: ' + escapeHtml(COB.error) + '</td></tr>'; return; }
+      COB.error = d.error || '';
+      COB.filas = d.filas || []; COB.seg = d.seguimiento || {}; COB.updatedAt = d.updatedAt;
+      // Aviso de pedidos nuevos (desde la ultima consulta, no en la primera carga).
+      const ids = new Set(COB.filas.map(f => f.id));
+      if(COB.vistos){
+        const nuevos = COB.filas.filter(f => !COB.vistos.has(f.id));
+        if(nuevos.length){
+          const f = nuevos[0];
+          showToast((nuevos.length > 1 ? nuevos.length + ' pedidos nuevos. ' : '') + 'Nuevo pedido de ' + (f.tipo==='suplencia'?'suplencia':'reemplazo') + ': com. ' + (f.com||'') + ' ' + (f.curso||'') + (f.solicitante ? ' (' + f.solicitante.nombre + ')' : ''), 9000);
+        }
+      }
+      COB.vistos = ids;
+      COB.cargado = true;
+      actualizarBadgeCob();
+      if(!document.getElementById('pageCoberturas').classList.contains('hidden')) renderCoberturas();
+    })
+    .catch(err => { COB.error = err && err.message ? err.message : String(err); });
+}
+function actualizarBadgeCob(){
+  const n = COB.filas.filter(f => cobNivel(f)==='crit').length;
+  const b = document.getElementById('cobTabBadge');
+  b.style.display = n ? 'inline-block' : 'none'; b.textContent = n;
+  b.title = n + ' pedido' + (n===1?'':'s') + ' urgente' + (n===1?'':'s') + ' sin cubrir';
+}
+setInterval(() => { if (autorizado()) loadCoberturas(true); }, COB_REFRESH_MS);
+function limpiarFiltrosCob(){
+  document.getElementById('fCobBuscar').value=''; document.getElementById('fCobTipo').value='';
+  document.getElementById('fCobEstado').value='pendientes'; document.getElementById('fCobAlerta').value='';
+  document.getElementById('fCobOcultarRes').checked = true; renderCoberturas();
+}
+function renderCoberturas(){
+  const q = document.getElementById('fCobBuscar').value.trim().toLowerCase();
+  const tipo = document.getElementById('fCobTipo').value;
+  const est = document.getElementById('fCobEstado').value;
+  const al = document.getElementById('fCobAlerta').value;
+  const ocultarRes = document.getElementById('fCobOcultarRes').checked;
+  const F = COB.filas;
+  const pend = F.filter(f => cobPendiente(f) && !(COB.seg[f.id] && COB.seg[f.id].estado==='resuelto'));
+  const cnt = k => pend.filter(f => cobAlertas(f).some(a => a.k===k)).length;
+  document.getElementById('statsCob').innerHTML = [
+    [pend.length, 'Pendientes de cubrir', pend.length ? 'orange' : 'green'],
+    [cnt('urgente'), 'Urgentes (menos de 24 h)', cnt('urgente') ? 'red' : 'green'],
+    [cnt('vencido'), 'Fecha pasada sin cubrir', cnt('vencido') ? 'red' : 'green'],
+    [cnt('pronto'), 'Próximos 3 días', cnt('pronto') ? 'orange' : 'green'],
+    [cnt('sincand'), 'Sin candidatos', cnt('sincand') ? 'red' : 'green'],
+    [F.filter(f => f.estadoBO==='FILLED').length, 'Cubiertas', 'green'],
+    [F.filter(f => Date.now() - new Date(f.pedidoAt).getTime() < 24*3600e3).length, 'Nuevos (24 h)', 'accent'],
+  ].map(([n,l,c]) => '<div class="stat-card ' + c + '"><div class="num">' + n + '</div><div class="lbl">' + l + '</div></div>').join('');
+  let L = F.filter(f => {
+    if(tipo && f.tipo !== tipo) return false;
+    if(est === 'pendientes' && !cobPendiente(f)) return false;
+    if(est === 'cubiertas' && f.estadoBO !== 'FILLED') return false;
+    if(est === 'canceladas' && f.estadoBO !== 'CANCELLED') return false;
+    if(ocultarRes && est === 'pendientes' && COB.seg[f.id] && COB.seg[f.id].estado==='resuelto') return false;
+    if(al && !cobAlertas(f).some(a => a.k===al)) return false;
+    if(q){ const t = [f.com, f.curso, f.solicitante && f.solicitante.nombre, f.solicitante && f.solicitante.email, f.cubre && f.cubre.nombre, f.motivo].join(' ').toLowerCase(); if(!t.includes(q)) return false; }
+    return true;
+  });
+  // Primero lo mas urgente, despues por fecha a cubrir.
+  const peso = f => ({crit:0, warn:1, '':2})[cobNivel(f)];
+  L.sort((a,b) => peso(a)-peso(b) || String(a.desde).localeCompare(String(b.desde)));
+  document.getElementById('cobCount').textContent = L.length + ' de ' + F.length + ' pedidos';
+  document.getElementById('cob-no-results').style.display = L.length ? 'none' : 'block';
+  document.getElementById('cobTbody').innerHTML = L.map(f => {
+    const niv = cobNivel(f);
+    const fechas = f.tipo==='suplencia'
+      ? (f.fechas.length ? f.fechas.map(x => cobFechaTxt(x.inicio, true)).join('<br>') : cobFechaTxt(f.desde, true))
+      : 'Desde ' + cobFechaTxt(f.desde, true) + '<br><span style="color:var(--ink-soft);font-size:11px;">hasta el final de la cursada</span>';
+    const sol = f.solicitante ? '<div style="font-weight:600;">' + escapeHtml(f.solicitante.nombre) + '</div><div style="font-size:11px;color:var(--ink-soft);">' + escapeHtml(f.solicitante.email) + '</div>' : '<span class="tag-no">-</span>';
+    const carg = f.cargadoPor ? '<div style="font-size:11px;color:var(--ink-soft);">Cargado por ' + escapeHtml(f.cargadoPor.nombre) + '</div>' : '';
+    const cand = f.cubre ? '<span class="cob-alert ok">Cubre: ' + escapeHtml(f.cubre.nombre) + '</span>'
+      : (f.candidatos.total ? f.candidatos.ofrecidas + ' ofrecidas de ' + f.candidatos.total + (f.candidatos.rechazadas ? '<br><span style="font-size:11px;color:var(--ink-soft);">' + f.candidatos.rechazadas + ' rechazaron</span>' : '') : '<span class="prof-empty">Ninguno</span>');
+    const seg = COB.seg[f.id];
+    const segHtml = COB.abierto === f.id ? cobFormSeg(f, seg)
+      : (seg ? '<div style="font-size:11.5px;"><span class="cob-alert ' + (seg.estado==='resuelto'?'ok':'info') + '">' + (seg.estado==='resuelto'?'Resuelto':seg.estado==='gestion'?'En gestión':'Nota') + '</span>' + (seg.nota ? ' ' + escapeHtml(seg.nota) : '') + '<div style="color:var(--ink-soft);font-size:10.5px;margin-top:2px;">' + escapeHtml(seg.por || '') + ' · ' + new Date(seg.at).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) + '</div></div>' : '')
+        + '<button class="bo-btn" style="margin-top:4px;" onclick="abrirSegCob(\'' + f.id + '\')">' + (seg ? 'Editar' : 'Agregar seguimiento') + '</button>';
+    return '<tr class="' + (niv ? 'cob-' + niv : '') + '">'
+      + '<td class="cob-alertas">' + (cobAlertas(f).map(a => '<span class="cob-alert ' + a.c + '">' + a.t + '</span>').join('') || '<span class="tag-no">-</span>') + '</td>'
+      + '<td class="cob-tipo">' + (f.tipo==='suplencia' ? 'Suplencia' : 'Reemplazo / baja') + '</td>'
+      + '<td>' + (f.com ? '<span class="commission" onclick="openBackOffice(\'' + f.cohortId + '\')" title="Ver esta comisión en Back Office">' + f.com + '</span>' : '-') + '</td>'
+      + '<td class="course-name">' + escapeHtml(f.curso) + (f.dias && f.dias.length ? '<div style="font-size:11px;color:var(--ink-soft);font-weight:500;">' + f.dias.map(d => COB_DIAS[d % 7]).join('/') + ' ' + escapeHtml(f.horario) + '</div>' : '') + '</td>'
+      + '<td>' + (f.rol ? (/TUTOR/i.test(f.rol) ? 'Tutor' : 'Profesor') : '-') + '</td>'
+      + '<td>' + sol + carg + '</td>'
+      + '<td class="cob-fechas">' + fechas + '</td>'
+      + '<td class="cob-motivo" title="' + escapeHtml(f.motivo) + '"><div>' + escapeHtml(f.motivo) + '</div></td>'
+      + '<td class="cob-fechas">' + cobFechaTxt(f.pedidoAt, true) + '</td>'
+      + '<td>' + escapeHtml(COB_ESTADO[f.estadoBO] || f.estadoBO) + '</td>'
+      + '<td>' + cand + '</td>'
+      + '<td class="cob-seg" style="min-width:190px;">' + segHtml + '</td>'
+      + '</tr>';
+  }).join('');
+  const at = COB.updatedAt ? new Date(COB.updatedAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  document.getElementById('cobNota').textContent = 'Datos del back office del ' + at + '. Las suplencias cubren clases puntuales; los reemplazos son bajas de la comisión desde la fecha indicada hasta el final. Las alertas se apagan cuando el pedido se cubre en el BO o se marca como resuelto acá.' + (COB.error ? ' Última consulta con error: ' + COB.error : '');
+}
+function cobFormSeg(f, seg){
+  return '<select id="cobSegEstado" style="width:100%;margin-bottom:4px;"><option value="gestion"' + (seg&&seg.estado==='gestion'?' selected':'') + '>En gestión</option><option value="resuelto"' + (seg&&seg.estado==='resuelto'?' selected':'') + '>Resuelto</option><option value=""' + (seg&&!seg.estado?' selected':'') + '>Solo nota</option></select>'
+    + '<select id="cobSegPor" style="width:100%;margin-bottom:4px;"><option value="">Tu nombre...</option>' + COMENTARIO_AUTORES.map(n => '<option' + (seg&&seg.por===n?' selected':'') + '>' + escapeHtml(n) + '</option>').join('') + '</select>'
+    + '<textarea id="cobSegNota" placeholder="Nota (opcional), ej: lo cubre Juan desde el BO">' + escapeHtml(seg && seg.nota || '') + '</textarea>'
+    + '<div style="display:flex;gap:6px;margin-top:4px;"><button class="btn-add" style="margin-top:0;" onclick="guardarSegCob(\'' + f.id + '\')">Guardar</button><button class="bo-btn" onclick="COB.abierto=null;renderCoberturas()">Cancelar</button>'
+    + (seg ? '<button class="bo-btn" onclick="guardarSegCob(\'' + f.id + '\', true)">Borrar</button>' : '') + '</div>';
+}
+function abrirSegCob(id){ COB.abierto = id; renderCoberturas(); }
+function guardarSegCob(id, borrar){
+  const estado = borrar ? '' : document.getElementById('cobSegEstado').value;
+  const nota = borrar ? '' : document.getElementById('cobSegNota').value.trim();
+  const por = borrar ? '' : document.getElementById('cobSegPor').value;
+  if(!borrar && !por){ showToast('Elegí tu nombre antes de guardar.', 3000); return; }
+  fetch('/api/dashboard-data?vista=coberturas', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ accion:'seguimiento', id, estado, nota, por }) })
+    .then(r => r.json())
+    .then(d => {
+      if(!d || d.error){ showToast('No se pudo guardar: ' + ((d && d.error) || 'error'), 5000); return; }
+      COB.seg = d.seguimiento || {}; COB.abierto = null; actualizarBadgeCob(); renderCoberturas();
+      showToast(borrar ? 'Seguimiento borrado.' : 'Seguimiento guardado.', 2500);
+    })
+    .catch(err => showToast('No se pudo guardar: ' + (err && err.message ? err.message : err), 5000));
+}
 
 function showToast(msg, ms){
   const t = document.getElementById('toast');
@@ -1440,6 +1658,9 @@ function showTab(tab){
   document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
   document.getElementById('tab-diplomas').classList.toggle('active', tab === 'diplomas');
   document.getElementById('tab-certificaciones').classList.toggle('active', tab === 'certificaciones');
+  document.getElementById('tab-coberturas').classList.toggle('active', tab === 'coberturas');
+  document.getElementById('pageCoberturas').classList.toggle('hidden', tab !== 'coberturas');
+  if(tab === 'coberturas') { if(!COB.cargado) loadCoberturas(false); else renderCoberturas(); }
   document.getElementById('pageComisiones').classList.toggle('hidden', tab !== 'comisiones');
   const showingProfile = tab === 'staff' && currentStaffEmail;
   document.getElementById('pageStaff').classList.toggle('hidden', !(tab === 'staff' && !currentStaffEmail));
