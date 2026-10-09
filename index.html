@@ -134,15 +134,19 @@
   .tab.active { background: var(--accent); color: white; }
   .tab .tab-badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 6px; border-radius: 999px; background: var(--red); color: white; font-size: 10.5px; text-align: center; }
   .tab.active .tab-badge { background: white; color: var(--red); }
-  .cob-alert { display: inline-block; border-radius: 999px; padding: 3px 9px; font-size: 10.5px; font-weight: 700; margin: 1px 2px 1px 0; white-space: nowrap; }
+  .cob-alert { display: inline-block; border-radius: 10px; padding: 3px 9px; font-size: 10.5px; font-weight: 700; line-height: 1.3; margin: 2px 2px 2px 0; white-space: normal; max-width: 100%; }
   .cob-alert.crit { background: var(--red-bg); color: var(--red); }
   .cob-alert.warn { background: var(--amber-bg); color: var(--amber); }
   .cob-alert.info { background: var(--accent-light); color: var(--accent-dark); }
   .cob-alert.ok { background: var(--green-bg); color: var(--green); }
-  .cob-tipo { font-weight: 700; font-size: 11.5px; }
+  .cob-tipo { white-space: nowrap; }
+  .cob-tipo-tag { display: inline-block; border-radius: 6px; padding: 3px 8px; font-weight: 700; font-size: 11px; }
+  .cob-tipo-tag.suplencia { background: var(--accent-light); color: var(--accent-dark); }
+  .cob-tipo-tag.reemplazo { background: var(--amber-bg); color: var(--amber); }
+  .cob-tipo-tag.baja { background: var(--red-bg); color: var(--red); }
   .cob-motivo { white-space: normal; min-width: 200px; max-width: 300px; font-size: 12px; color: var(--ink-soft); }
   .cob-motivo div { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-  .cob-alertas { white-space: normal; max-width: 170px; }
+  .cob-alertas { white-space: normal; width: 160px; min-width: 160px; max-width: 160px; }
   .cob-fechas { white-space: nowrap; font-variant-numeric: tabular-nums; }
   tr.cob-crit td:first-child { box-shadow: inset 4px 0 0 var(--red); }
   tr.cob-warn td:first-child { box-shadow: inset 4px 0 0 var(--amber); }
@@ -477,7 +481,7 @@
   <div class="tab" id="tab-staff" onclick="showTab('staff')">Staff</div>
   <div class="tab" id="tab-diplomas" onclick="showTab('diplomas')">Diplomaturas</div>
   <div class="tab" id="tab-certificaciones" onclick="showTab('certificaciones')">Certificaciones</div>
-  <div class="tab" id="tab-coberturas" onclick="showTab('coberturas')">Reemplazos y suplencias<span class="tab-badge" id="cobTabBadge" style="display:none"></span></div>
+  <div class="tab" id="tab-coberturas" onclick="showTab('coberturas')">Reemplazos, suplencias y bajas<span class="tab-badge" id="cobTabBadge" style="display:none"></span></div>
 </div>
 
 <div class="page" id="pageComisiones">
@@ -655,8 +659,8 @@
 
 <!-- ======================= REEMPLAZOS Y SUPLENCIAS ======================= -->
 <div class="page hidden" id="pageCoberturas">
-  <h2 class="section-title">Reemplazos y suplencias</h2>
-  <p class="section-sub">Pedidos que carga el staff en el back office cuando no puede dar una clase (suplencia) o deja una comisión (reemplazo / baja). Se actualiza solo cada 2 minutos.</p>
+  <h2 class="section-title">Reemplazos, suplencias y bajas</h2>
+  <p class="section-sub">Pedidos que carga el staff en el back office cuando no puede dar clases. <b>Suplencia</b>: solo días puntuales. <b>Reemplazo</b>: deja una comisión que ya está en curso (definitivo). <b>Baja</b>: deja una comisión que todavía no empezó (definitivo). Se actualiza solo cada 2 minutos.</p>
 
   <div class="stats" id="statsCob"></div>
 
@@ -666,7 +670,8 @@
     <select id="fCobTipo" onchange="renderCoberturas()">
       <option value="">Todos</option>
       <option value="suplencia">Suplencia</option>
-      <option value="reemplazo">Reemplazo / baja</option>
+      <option value="reemplazo">Reemplazo</option>
+      <option value="baja">Baja</option>
     </select>
     <span class="filter-label">Estado</span>
     <select id="fCobEstado" onchange="renderCoberturas()">
@@ -971,6 +976,7 @@ document.getElementById('tbody').addEventListener('click', function(e){
 const COB = { cargado: false, filas: [], seg: {}, vistos: null, abierto: null, updatedAt: null, error: '' };
 const COB_REFRESH_MS = 2 * 60 * 1000;
 const COB_ESTADO = { SEARCHING: 'Buscando candidatos', OFFERED: 'Ofrecida a candidatos', PENDING_SIGNATURE: 'Firma pendiente', MANUAL: 'Gestión manual', FILLED: 'Cubierta', EXPIRED: 'Vencida en BO', CANCELLED: 'Cancelada' };
+const COB_TIPO = { suplencia: 'Suplencia', reemplazo: 'Reemplazo', baja: 'Baja' };
 const COB_DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 function cobFechaTxt(iso, conHora){
   if(!iso) return '';
@@ -989,7 +995,7 @@ function cobAlertas(f){
   if(!cobPendiente(f)){ if(f.estadoBO==='FILLED') out.push({k:'ok', c:'ok', t:'Cubierta'}); return out; }
   if(seg && seg.estado==='resuelto'){ out.push({k:'ok', c:'ok', t:'Resuelto en el tablero'}); return out; }
   const falta = new Date(f.desde).getTime() - ahora;
-  if(falta < 0) out.push({k:'vencido', c:'crit', t: f.tipo==='suplencia' ? 'La clase ya pasó sin cubrir' : 'Ya debía empezar el reemplazo'});
+  if(falta < 0) out.push({k:'vencido', c:'crit', t: f.tipo==='suplencia' ? 'La clase ya pasó sin cubrir' : 'Fecha pasada sin cubrir'});
   else if(falta < 24*3600e3) out.push({k:'urgente', c:'crit', t:'Menos de 24 h'});
   else if(falta < 72*3600e3) out.push({k:'pronto', c:'warn', t:'Menos de 3 días'});
   if(!f.candidatos.ofrecidas && !f.cubre) out.push({k:'sincand', c: falta < 72*3600e3 ? 'crit' : 'warn', t: f.candidatos.total ? 'Sin candidatos activos' : 'Sin candidatos'});
@@ -1010,7 +1016,7 @@ function loadCoberturas(auto, force){
         const nuevos = COB.filas.filter(f => !COB.vistos.has(f.id));
         if(nuevos.length){
           const f = nuevos[0];
-          showToast((nuevos.length > 1 ? nuevos.length + ' pedidos nuevos. ' : '') + 'Nuevo pedido de ' + (f.tipo==='suplencia'?'suplencia':'reemplazo') + ': com. ' + (f.com||'') + ' ' + (f.curso||'') + (f.solicitante ? ' (' + f.solicitante.nombre + ')' : ''), 9000);
+          showToast((nuevos.length > 1 ? nuevos.length + ' pedidos nuevos. ' : '') + 'Nuevo pedido de ' + COB_TIPO[f.tipo].toLowerCase() + ': com. ' + (f.com||'') + ' ' + (f.curso||'') + (f.solicitante ? ' (' + f.solicitante.nombre + ')' : ''), 9000);
         }
       }
       COB.vistos = ids;
@@ -1080,7 +1086,7 @@ function renderCoberturas(){
         + '<button class="bo-btn" style="margin-top:4px;" onclick="abrirSegCob(\'' + f.id + '\')">' + (seg ? 'Editar' : 'Agregar seguimiento') + '</button>';
     return '<tr class="' + (niv ? 'cob-' + niv : '') + '">'
       + '<td class="cob-alertas">' + (cobAlertas(f).map(a => '<span class="cob-alert ' + a.c + '">' + a.t + '</span>').join('') || '<span class="tag-no">-</span>') + '</td>'
-      + '<td class="cob-tipo">' + (f.tipo==='suplencia' ? 'Suplencia' : 'Reemplazo / baja') + '</td>'
+      + '<td class="cob-tipo"><span class="cob-tipo-tag ' + f.tipo + '">' + COB_TIPO[f.tipo] + '</span><div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">' + (f.tipo==='suplencia' ? 'Días puntuales' : 'Definitivo') + '</div></td>'
       + '<td>' + (f.com ? '<span class="commission" onclick="openBackOffice(\'' + f.cohortId + '\')" title="Ver esta comisión en Back Office">' + f.com + '</span>' : '-') + '</td>'
       + '<td class="course-name">' + escapeHtml(f.curso) + (f.dias && f.dias.length ? '<div style="font-size:11px;color:var(--ink-soft);font-weight:500;">' + f.dias.map(d => COB_DIAS[d % 7]).join('/') + ' ' + escapeHtml(f.horario) + '</div>' : '') + '</td>'
       + '<td>' + (f.rol ? (/TUTOR/i.test(f.rol) ? 'Tutor' : 'Profesor') : '-') + '</td>'
@@ -1094,7 +1100,7 @@ function renderCoberturas(){
       + '</tr>';
   }).join('');
   const at = COB.updatedAt ? new Date(COB.updatedAt).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-  document.getElementById('cobNota').textContent = 'Datos del back office del ' + at + '. Las suplencias cubren clases puntuales; los reemplazos son bajas de la comisión desde la fecha indicada hasta el final. Las alertas se apagan cuando el pedido se cubre en el BO o se marca como resuelto acá.' + (COB.error ? ' Última consulta con error: ' + COB.error : '');
+  document.getElementById('cobNota').textContent = 'Datos del back office del ' + at + '. Suplencia: clases puntuales. Reemplazo: el staff deja una comisión en curso, desde la fecha indicada hasta el final. Baja: el staff deja una comisión que todavía no empezó. Reemplazos y bajas son definitivos. Las alertas se apagan cuando el pedido se cubre en el BO o se marca como resuelto acá.' + (COB.error ? ' Última consulta con error: ' + COB.error : '');
 }
 function cobFormSeg(f, seg){
   return '<select id="cobSegEstado" style="width:100%;margin-bottom:4px;"><option value="gestion"' + (seg&&seg.estado==='gestion'?' selected':'') + '>En gestión</option><option value="resuelto"' + (seg&&seg.estado==='resuelto'?' selected':'') + '>Resuelto</option><option value=""' + (seg&&!seg.estado?' selected':'') + '>Solo nota</option></select>'
