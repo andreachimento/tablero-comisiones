@@ -311,7 +311,7 @@ async function buildRows() {
 //           Se guarda una copia de 2 minutos en la base para que varias
 //           personas mirando a la vez no multipliquen las consultas al BO;
 //           ?force=1 la rehace.
-//   POST -> { accion: 'seguimiento', id, estado: 'gestion'|'resuelto'|'',
+//   POST -> { accion: 'seguimiento', id | ids[], estado: 'gestion'|'esperando'|'resuelto'|'descartado'|'',
 //           nota, por } guarda el seguimiento interno de un pedido.
 // ----------------------------------------------------------------------------
 const COB_CACHE_MS = 2 * 60 * 1000;
@@ -329,11 +329,20 @@ async function handleCoberturas(req, res) {
   };
   if (req.method === 'POST') {
     const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    if (b.accion !== 'seguimiento' || !/^[0-9a-f-]{36}$/i.test(String(b.id || ''))) return res.status(400).json({ error: 'pedido invalido' });
+    // id (uno) o ids (varios a la vez). Si no viene nota, se conserva la que ya tenia.
+    const ids = [...new Set((Array.isArray(b.ids) ? b.ids : [b.id]).map(String))].slice(0, 200);
+    if (b.accion !== 'seguimiento' || !ids.length || !ids.every(x => /^[0-9a-f-]{36}$/i.test(x))) return res.status(400).json({ error: 'pedido invalido' });
     if (!redis) return res.status(500).json({ error: 'Falta la base de datos para guardar el seguimiento.' });
-    const estado = ['gestion', 'resuelto'].includes(b.estado) ? b.estado : '';
-    if (!estado && !String(b.nota || '').trim()) await redis.hdel('coberturas:seguimiento', b.id);
-    else await redis.hset('coberturas:seguimiento', { [b.id]: JSON.stringify({ estado, nota: String(b.nota || '').slice(0, 1000), por: String(b.por || '').slice(0, 80), at: new Date().toISOString() }) });
+    const estado = ['gestion', 'esperando', 'resuelto', 'descartado'].includes(b.estado) ? b.estado : '';
+    const prev = await leerSeg();
+    const borrar = [], poner = {};
+    ids.forEach(id => {
+      const nota = b.nota === undefined || b.nota === null ? ((prev[id] && prev[id].nota) || '') : String(b.nota);
+      if (!estado && !nota.trim()) borrar.push(id);
+      else poner[id] = JSON.stringify({ estado, nota: nota.slice(0, 1000), por: String(b.por || '').slice(0, 80), at: new Date().toISOString() });
+    });
+    if (borrar.length) await redis.hdel('coberturas:seguimiento', ...borrar);
+    if (Object.keys(poner).length) await redis.hset('coberturas:seguimiento', poner);
     return res.status(200).json({ ok: true, seguimiento: await leerSeg() });
   }
   const force = req.query && (req.query.force === '1' || req.query.force === 'true');
