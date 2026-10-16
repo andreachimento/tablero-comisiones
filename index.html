@@ -2453,7 +2453,7 @@ function renderStaffProfile(p){
     const linkAttr = h.cohortId ? ' onclick="openBackOffice(\'' + escapeHtml(String(h.cohortId)) + '\')" title="Ver esta comision en Back Office"' : '';
     const linkHint = h.cohortId ? '<div class="hist-item-link-hint">Ver en Back Office &rarr;</div>' : '';
     let out = '<div class="hist-item ' + g.itemClass + linkClass + '"' + linkAttr + '><div class="com-left"><span class="com-curso">' + escapeHtml(h.curso) + ' <span class="com-num">#' + h.comisionNumber + '</span></span>'
-      + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Horario: ' + (h.horaInicio ? (h.horaInicio + ' a ' + h.horaFin) : '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span>' + linkHint + '</div>'
+      + '<span class="com-fechas">Inicio: ' + h.fechaInicio + ' &middot; Fin: ' + (h.fechaFin || '-') + ' &middot; Dia: ' + (h.dia || '-') + ' &middot; Horario: ' + (h.horaInicio ? (h.horaInicio + ' a ' + h.horaFin) : '-') + ' &middot; Rol: ' + h.rol + ' &middot; <span class="tipo-tag ' + tipoClass + '">' + h.tipoAsignacion + '</span></span>' + (h.notaAsignacion ? '<span class="com-fechas" style="color:var(--amber);font-weight:600;">' + escapeHtml(h.notaAsignacion) + '</span>' : '') + linkHint + '</div>'
       + '<div class="hist-right"><span class="hist-status ' + g.statusClass + '">' + g.statusLabel + '</span>';
     if(g.key === 'finalizada'){
       out += '<span class="stars-small" data-cohort="' + h.cohortId + '" data-rating="' + (h.rating || 0) + '"></span>';

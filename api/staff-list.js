@@ -57,16 +57,32 @@ async function apiGet(base, path, key, retries) {
   return {};
 }
 
-async function fetchAllInstructors(env) {
-  const first = await apiGet(env.BASE, '/platform/user/m2m/admin/users?role=INSTRUCTOR&page=1&limit=100', env.STUDENT_KEY);
-  let all = (first.items || []).slice();
-  const totalPages = Math.min(first.totalPages || 1, 30);
-  if (totalPages > 1) {
-    const proms = [];
-    for (let p = 2; p <= totalPages; p++) {
-      proms.push(apiGet(env.BASE, `/platform/user/m2m/admin/users?role=INSTRUCTOR&page=${p}&limit=100`, env.STUDENT_KEY));
+// Pide varias paginas de a poco (no todas juntas: el back office corta
+// pedidos cuando llegan muchos a la vez y antes eso hacia que se perdieran
+// personas del listado sin ningun aviso). Si alguna pagina igual no se pudo
+// traer, se avisa con un error en vez de seguir con datos incompletos.
+async function fetchPages(env, pathFor, pages) {
+  const out = new Array(pages.length);
+  let i = 0;
+  async function worker() {
+    while (i < pages.length) {
+      const k = i++;
+      out[k] = await apiGet(env.BASE, pathFor(pages[k]), env.STUDENT_KEY, 4);
     }
-    const results = await Promise.all(proms);
+  }
+  await Promise.all(Array.from({ length: Math.min(6, pages.length) }, worker));
+  const fallidas = pages.filter((p, k) => !out[k] || !Array.isArray(out[k].items));
+  if (fallidas.length) throw new Error('No se pudieron traer ' + fallidas.length + ' paginas del back office (' + pathFor('N').split('?')[0] + ')');
+  return out;
+}
+
+async function fetchAllInstructors(env) {
+  const first = await apiGet(env.BASE, '/platform/user/m2m/admin/users?role=INSTRUCTOR&page=1&limit=100', env.STUDENT_KEY, 4);
+  let all = (first.items || []).slice();
+  const totalPages = Math.min(first.totalPages || 1, 100);
+  if (totalPages > 1) {
+    const pages = []; for (let p = 2; p <= totalPages; p++) pages.push(p);
+    const results = await fetchPages(env, p => `/platform/user/m2m/admin/users?role=INSTRUCTOR&page=${p}&limit=100`, pages);
     results.forEach(d => { all = all.concat(d.items || []); });
   }
   return all;
@@ -85,16 +101,14 @@ async function fetchAllInstructors(env) {
 // arriba.
 // ----------------------------------------------------------------------------
 async function fetchAssignmentUserIds(env) {
-  const first = await apiGet(env.BASE, '/platform/staff/m2m/admin/assignments?page=1&limit=100', env.STUDENT_KEY);
+  const first = await apiGet(env.BASE, '/platform/staff/m2m/admin/assignments?page=1&limit=100', env.STUDENT_KEY, 4);
+  if (!Array.isArray(first.items)) throw new Error('No se pudo leer el listado de asignaciones del back office');
   const ids = new Set();
-  (first.items || []).forEach(a => { if (a.userId) ids.add(a.userId); });
-  const totalPages = Math.min(first.totalPages || 1, 60);
+  first.items.forEach(a => { if (a.userId) ids.add(a.userId); });
+  const totalPages = Math.min(first.totalPages || 1, 200);
   if (totalPages > 1) {
-    const proms = [];
-    for (let p = 2; p <= totalPages; p++) {
-      proms.push(apiGet(env.BASE, `/platform/staff/m2m/admin/assignments?page=${p}&limit=100`, env.STUDENT_KEY));
-    }
-    const results = await Promise.all(proms);
+    const pages = []; for (let p = 2; p <= totalPages; p++) pages.push(p);
+    const results = await fetchPages(env, p => `/platform/staff/m2m/admin/assignments?page=${p}&limit=100`, pages);
     results.forEach(d => (d.items || []).forEach(a => { if (a.userId) ids.add(a.userId); }));
   }
   return ids;

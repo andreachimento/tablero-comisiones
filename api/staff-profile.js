@@ -78,14 +78,15 @@ function dateISO(dateObj) {
 // puntual (?userId=...).
 async function fetchAssignmentsForAccount(env, userId) {
   const first = await apiGet(env.BASE, `/platform/staff/m2m/admin/assignments?userId=${userId}&page=1&limit=100`, env.STUDENT_KEY);
-  let assignments = (first.items || []).slice();
+  const lista = d => (d && (d.items || d.data)) || (Array.isArray(d) ? d : []);
+  let assignments = lista(first).slice();
   const totalPages = Math.min(first.totalPages || 1, 20);
   if (totalPages > 1) {
     const proms = [];
     for (let p = 2; p <= totalPages; p++) {
       proms.push(apiGet(env.BASE, `/platform/staff/m2m/admin/assignments?userId=${userId}&page=${p}&limit=100`, env.STUDENT_KEY));
     }
-    (await Promise.all(proms)).forEach(d => { assignments = assignments.concat(d.items || []); });
+    (await Promise.all(proms)).forEach(d => { assignments = assignments.concat(lista(d)); });
   }
   return assignments;
 }
@@ -117,26 +118,23 @@ module.exports = async function handler(req, res) {
     let accounts = null;
     try {
       accounts = await getAccountsForPerson(email);
-    } catch (e) { /* cache no disponible, seguimos con el fallback de abajo */ }
+    } catch (e) { /* cache no disponible, seguimos con la busqueda directa de abajo */ }
+    accounts = Array.isArray(accounts) ? accounts.slice() : [];
 
-    if (!accounts || !accounts.length) {
-      // Cache todavia no poblada (ej. primera vez que se abre un perfil
-      // despues de desplegar esto, antes de haber abierto el listado una
-      // vez) - probamos el mail directamente, como una sola cuenta.
-      let backofficeUser = null;
+    // Ademas del indice (que lo arma el listado de Staff y puede estar
+    // desactualizado, por ejemplo si le crearon una cuenta +profesor nueva
+    // despues de la ultima carga), SIEMPRE se busca directo en el back office
+    // el mail que se abrio y el mail base, y se suman si faltaban.
+    const mailsABuscar = Array.from(new Set([rawEmail, email, ...['profesor', 'tutor', 'staff'].map(t => email.replace('@', '+' + t + '@'))]));
+    const encontrados = await Promise.all(mailsABuscar.map(async m => {
       try {
-        const lookup = await fetch(env.BASE + '/platform/user/m2m/admin/users/by-email?email=' + encodeURIComponent(email), { headers: { 'X-API-Key': env.STUDENT_KEY } });
-        if (lookup.ok) {
-          const txt = await lookup.text();
-          try { backofficeUser = JSON.parse(txt); } catch (e) { /* noop */ }
-        }
-      } catch (e) { /* noop, tratamos como no encontrado */ }
-      if (backofficeUser && backofficeUser.id) {
-        accounts = [{ id: backofficeUser.id, email, firstName: backofficeUser.firstName || '', lastName: backofficeUser.lastName || '' }];
-      } else {
-        accounts = [];
-      }
-    }
+        const lookup = await fetch(env.BASE + '/platform/user/m2m/admin/users/by-email?email=' + encodeURIComponent(m), { headers: { 'X-API-Key': env.STUDENT_KEY } });
+        if (!lookup.ok) return null;
+        const u = JSON.parse(await lookup.text());
+        return u && u.id ? { id: u.id, email: String(u.email || m).toLowerCase(), firstName: u.firstName || '', lastName: u.lastName || '' } : null;
+      } catch (e) { return null; }
+    }));
+    encontrados.filter(Boolean).forEach(u => { if (!accounts.some(a => a.id === u.id)) accounts.push(u); });
 
     const isRealInstructor = accounts.length > 0;
 
@@ -230,6 +228,27 @@ module.exports = async function handler(req, res) {
           if (c.status === 'IN_PROGRESS') estadoComision = 'en_curso';
           else if (c.status === 'COMPLETED') estadoComision = 'finalizada';
         }
+        // Lo que vale para ESTA persona es su propia asignacion: si se dio de
+        // baja (o era una suplencia de un dia) su fecha de fin es anterior a la
+        // de la comision; si es un reemplazo, recien empieza mas adelante.
+        const aIni = a.startDate ? new Date(a.startDate) : null;
+        const aFin = a.endDate ? new Date(a.endDate) : null;
+        let notaAsignacion = '';
+        // margen de 36 h: la fecha de fin de la asignacion suele venir unas horas antes que la de la comision
+        const terminaAntes = aFin && (!endAR || aFin.getTime() < endAR.getTime() - 36 * 3600e3);
+        if (a.status === 'COMPLETED' || (aFin && aFin < now && (terminaAntes || estadoComision === 'finalizada'))) {
+          if (estadoComision !== 'finalizada') notaAsignacion = (a.isReplacement && a.replacementType !== 'REEMPLAZO') ? 'Suplencia del ' + dateDMY(aIni || aFin) : 'Dejó la comisión el ' + dateDMY(aFin || now);
+          estadoComision = 'finalizada';
+        } else if (a.status === 'LEAVING') {
+          notaAsignacion = 'Se da de baja' + (aFin ? ' el ' + dateDMY(aFin) : '');
+        } else if (aIni && aIni > now && estadoComision === 'en_curso') {
+          estadoComision = 'asignada';
+          notaAsignacion = 'Toma la comisión desde el ' + dateDMY(aIni);
+        } else if (terminaAntes && endAR) {
+          notaAsignacion = 'Está asignado/a hasta el ' + dateDMY(aFin) + ' (la comisión sigue hasta el ' + dateDMY(endAR) + ')';
+        } else if (!endAR && estadoComision === 'en_curso') {
+          notaAsignacion = 'La comisión no tiene fecha de fin cargada en el BO';
+        }
 
         let tipoAsignacion = 'Titular';
         if (a.isReplacement) tipoAsignacion = a.replacementType === 'REEMPLAZO' ? 'Reemplazo' : 'Suplente';
@@ -249,6 +268,8 @@ module.exports = async function handler(req, res) {
           rol: ROLE_LABEL[a.cohortRole] || a.cohortRole || '',
           tipoAsignacion,
           estadoComision,
+          notaAsignacion,
+          estadoAsignacionBO: a.status || '',
           rating: ratings[c.id] || null,
           // Campos internos (no se mandan al cliente) para poder calcular mas
           // abajo si sus postulaciones se superponen con esto.
