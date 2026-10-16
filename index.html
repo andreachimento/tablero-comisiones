@@ -2364,7 +2364,7 @@ function renderStaffProfile(p){
 
   html += '<div class="card"><div class="comments-card-header"><h3 style="margin:0;">Comentarios</h3>'
     + '<button id="btnSyncComentarios" class="btn-sync-comentarios" onclick="syncStaffComentarios(false)" title="Buscar comentarios nuevos cargados en el CRM de Relaciones Laborales (Notion) para esta persona">&#8635; Actualizar comentarios</button></div>'
-    + '<p class="sync-note">Trae automaticamente lo nuevo cargado en el CRM de Relaciones Laborales (Notion) cada 15 minutos mientras este perfil este abierto y lo estes mirando, ademas de poder pedirlo a mano con el boton.</p>'
+    + '<p class="sync-note">Trae automaticamente lo nuevo cargado en el CRM de Relaciones Laborales (Notion) una vez por hora mientras este perfil este abierto y lo estes mirando, ademas de poder pedirlo a mano con el boton.</p>'
     + '<div class="comment-box">'
     + '<div class="autor-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
     + '<label for="selComentarioAutor" style="font-size:11.5px;font-weight:700;color:var(--ink-soft);white-space:nowrap;">Tu nombre:</label>'
@@ -2622,7 +2622,7 @@ function toggleCommentExpand(i, el){
 // corriendo aparte).
 // ----------------------------------------------------------------------------
 let staffProfileSyncTimer = null;
-const STAFF_PROFILE_SYNC_MS = 15 * 60 * 1000;
+const STAFF_PROFILE_SYNC_MS = 60 * 60 * 1000;
 
 function startStaffProfileAutoSync(){
   stopStaffProfileAutoSync();
