@@ -1035,7 +1035,29 @@ function initCobControles(){
   const b = document.getElementById('cobBulkEstado');
   if(b && !b.options.length) b.innerHTML = cobOpcionesEstado('resuelto');
 }
-const COB_REFRESH_MS = 2 * 60 * 1000;
+// ----------------------------------------------------------------------------
+// Recargas automaticas: cada cuanto, y solo cuando alguien esta mirando
+// ----------------------------------------------------------------------------
+// La base propia del tablero (Upstash, plan gratuito) tiene un tope de 10 GB de
+// transferencia por mes, y en octubre de 2026 se agoto: la base quedo
+// suspendida y el tablero dejo de cargar. No era por tener muchos datos (5 MB
+// de 250 MB) ni por cantidad de comandos (203 mil de 500 mil), sino por leer
+// pocas cosas MUCHAS veces.
+//
+// La causa principal era que estos relojes seguian corriendo aunque nadie
+// estuviera mirando: un tablero abierto en una pestaña de fondo toda la noche
+// recargaba igual. Ahora cada ciclo se saltea si la pestaña no esta visible, y
+// al volver a mirarla se actualiza enseguida (ver los visibilitychange de mas
+// abajo), asi que no se pierde frescura donde importa.
+function cadaTanto(fn, ms){
+  return setInterval(() => {
+    if (document.visibilityState !== 'visible') return; // nadie esta mirando
+    if (!autorizado()) return;
+    fn();
+  }, ms);
+}
+
+const COB_REFRESH_MS = 10 * 60 * 1000;
 const COB_ESTADO = { SEARCHING: 'Buscando candidatos', OFFERED: 'Ofrecida a candidatos', PENDING_SIGNATURE: 'Firma pendiente', MANUAL: 'Gestión manual', FILLED: 'Cubierta', EXPIRED: 'Vencida en BO', CANCELLED: 'Cancelada', SIN_BO: 'Sin cargar en BO' };
 const COB_TIPO = { suplencia: 'Suplencia', reemplazo: 'Reemplazo', baja: 'Baja' };
 const COB_DIAS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -1103,7 +1125,14 @@ function actualizarBadgeCob(){
   b.style.display = n ? 'inline-block' : 'none'; b.textContent = n;
   b.title = n + ' pedido' + (n===1?'':'s') + ' urgente' + (n===1?'':'s') + ' sin cubrir';
 }
-setInterval(() => { if (autorizado()) loadCoberturas(true); }, COB_REFRESH_MS);
+cadaTanto(() => loadCoberturas(true), COB_REFRESH_MS);
+// Al volver a mirar la pestaña, se actualiza enseguida en vez de esperar al
+// proximo ciclo (mismo criterio que la pestaña Comisiones, mas abajo).
+let ultimaCargaCob = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !autorizado()) return;
+  if (Date.now() - ultimaCargaCob > 60 * 1000) { ultimaCargaCob = Date.now(); loadCoberturas(true); }
+});
 function limpiarFiltrosCob(){
   document.getElementById('fCobBuscar').value=''; document.getElementById('fCobTipo').value='';
   document.getElementById('fCobEstado').value='pendientes'; document.getElementById('fCobAlerta').value='';
@@ -1467,8 +1496,8 @@ function triggerRefresh(){ loadData(false); }
 // Actualizacion automatica: cada 5 minutos vuelve a consultar el sistema de
 // Coderhouse en segundo plano, asi si se crea o se cancela una comision el
 // tablero lo refleja solo, sin que nadie tenga que apretar "Actualizar datos".
-const AUTO_REFRESH_MS = 5 * 60 * 1000;
-setInterval(() => { if (autorizado()) loadData(true); }, AUTO_REFRESH_MS);
+const AUTO_REFRESH_MS = 15 * 60 * 1000;
+cadaTanto(() => loadData(true), AUTO_REFRESH_MS);
 
 // Si la pestaña estuvo en segundo plano (minimizada u otra pestaña activa) y
 // la persona vuelve a mirarla, se actualiza al toque en vez de esperar al
@@ -2335,7 +2364,7 @@ function renderStaffProfile(p){
 
   html += '<div class="card"><div class="comments-card-header"><h3 style="margin:0;">Comentarios</h3>'
     + '<button id="btnSyncComentarios" class="btn-sync-comentarios" onclick="syncStaffComentarios(false)" title="Buscar comentarios nuevos cargados en el CRM de Relaciones Laborales (Notion) para esta persona">&#8635; Actualizar comentarios</button></div>'
-    + '<p class="sync-note">Trae automaticamente lo nuevo cargado en el CRM de Relaciones Laborales (Notion) cada 5 minutos mientras este perfil este abierto, ademas de poder pedirlo a mano con el boton.</p>'
+    + '<p class="sync-note">Trae automaticamente lo nuevo cargado en el CRM de Relaciones Laborales (Notion) cada 15 minutos mientras este perfil este abierto y lo estes mirando, ademas de poder pedirlo a mano con el boton.</p>'
     + '<div class="comment-box">'
     + '<div class="autor-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
     + '<label for="selComentarioAutor" style="font-size:11.5px;font-weight:700;color:var(--ink-soft);white-space:nowrap;">Tu nombre:</label>'
@@ -2593,11 +2622,11 @@ function toggleCommentExpand(i, el){
 // corriendo aparte).
 // ----------------------------------------------------------------------------
 let staffProfileSyncTimer = null;
-const STAFF_PROFILE_SYNC_MS = 5 * 60 * 1000;
+const STAFF_PROFILE_SYNC_MS = 15 * 60 * 1000;
 
 function startStaffProfileAutoSync(){
   stopStaffProfileAutoSync();
-  staffProfileSyncTimer = setInterval(() => syncStaffComentarios(true), STAFF_PROFILE_SYNC_MS);
+  staffProfileSyncTimer = cadaTanto(() => syncStaffComentarios(true), STAFF_PROFILE_SYNC_MS);
 }
 
 function stopStaffProfileAutoSync(){
@@ -3103,7 +3132,7 @@ function certCourseNames(){
   // tipicos del espanol, para que el resultado se parezca al nombre real.
   const CURSO_MINUSCULAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'en', 'para', 'con', 'a', 'al', 'o', 'u', 'e']);
   const yaPresentes = new Set(Array.from(cursos).map(c => c.trim().toLowerCase()));
-  Object.keys(CERT_RESP.preguntas || {}).forEach(key => {
+  Object.keys(CERT_RESP.preguntasResumen || {}).forEach(key => {
     const cursoLower = key.split('|')[0];
     if (!cursoLower || yaPresentes.has(cursoLower)) return;
     const cursoDisplay = cursoLower.split(' ').map((palabra, i) => {
@@ -3398,7 +3427,24 @@ function cerrarGestionPreguntas(){
   document.getElementById('preguntasModalOverlay').classList.add('hidden');
 }
 
-function renderPreguntasAdmin(){
+// Las preguntas de cada curso ya no vienen en el listado (eran el bulto mas
+// pesado del tablero): se piden aca, solo las del curso que se esta mirando, y
+// quedan guardadas en CERT_RESP.preguntas para no volver a pedirlas.
+async function cargarPreguntasDe(curso, rol){
+  const key = preguntasKeyFor(curso, rol);
+  CERT_RESP.preguntas = CERT_RESP.preguntas || {};
+  if(CERT_RESP.preguntas[key]) return CERT_RESP.preguntas[key];
+  try {
+    const r = await fetch('/api/certificaciones?curso=' + encodeURIComponent(curso) + '&rol=' + encodeURIComponent(rol));
+    const d = await r.json();
+    CERT_RESP.preguntas[key] = Array.isArray(d && d.preguntas) ? d.preguntas : [];
+  } catch(e){
+    CERT_RESP.preguntas[key] = [];
+  }
+  return CERT_RESP.preguntas[key];
+}
+
+async function renderPreguntasAdmin(){
   const curso = document.getElementById('pregCurso').value;
   const rol = document.getElementById('pregRol').value;
   const wrap = document.getElementById('preguntasListWrap');
@@ -3406,7 +3452,15 @@ function renderPreguntasAdmin(){
     wrap.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Elegi un curso para ver sus preguntas.</p>';
     return;
   }
-  const lista = (CERT_RESP.preguntas || {})[preguntasKeyFor(curso, rol)] || [];
+  const key = preguntasKeyFor(curso, rol);
+  if(!(CERT_RESP.preguntas || {})[key]){
+    wrap.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);"><span class="spinner"></span>Cargando preguntas...</p>';
+    await cargarPreguntasDe(curso, rol);
+    // Si mientras cargaba se cambio de curso o de rol, lo que llego ya no
+    // corresponde a lo que se esta mirando: lo dibuja la llamada nueva.
+    if(document.getElementById('pregCurso').value !== curso || document.getElementById('pregRol').value !== rol) return;
+  }
+  const lista = (CERT_RESP.preguntas || {})[key] || [];
   if(!lista.length){
     wrap.innerHTML = '<p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Todavia no hay preguntas cargadas para ' + escapeHtml(curso) + ' (' + (rol === 'profesor' ? 'Profesor' : 'Tutor Adjunto') + ').</p>';
     return;
@@ -3446,10 +3500,10 @@ function limpiarFormPregunta(){
   agregarOpcionForm(); agregarOpcionForm(); agregarOpcionForm(); agregarOpcionForm();
 }
 
-function editarPreguntaForm(id){
+async function editarPreguntaForm(id){
   const curso = document.getElementById('pregCurso').value;
   const rol = document.getElementById('pregRol').value;
-  const lista = (CERT_RESP.preguntas || {})[preguntasKeyFor(curso, rol)] || [];
+  const lista = await cargarPreguntasDe(curso, rol);
   const p = lista.find(x => x.id === id);
   if(!p) return;
   document.getElementById('pregFormTitle').textContent = 'Editar pregunta';
@@ -3547,7 +3601,7 @@ async function importarPreguntasDesdeArchivo(inputEl){
     for(const rol of roles){
       setStatus('Procesando ' + (i + 1) + '/' + totalCursos + ': ' + c.curso + ' [' + rol + ']...');
       const key = preguntasKeyFor(c.curso, rol);
-      const existentes = (CERT_RESP.preguntas || {})[key] || [];
+      const existentes = await cargarPreguntasDe(curso, rol);
 
       for(const p of existentes){
         try {

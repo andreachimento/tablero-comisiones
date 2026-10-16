@@ -142,6 +142,17 @@ module.exports = async function handler(req, res) {
   if (!requireAuth(req, res)) return;
   try {
     if (req.method === 'GET') {
+      // Las preguntas de UN curso+rol, para el modal de "Gestionar preguntas".
+      // Es un hget de un solo campo, no el banco entero: por eso el listado de
+      // mas abajo ya no las manda todas (ver preguntasResumen).
+      const cursoPedido = String((req.query && req.query.curso) || '').trim();
+      if (cursoPedido) {
+        const rolPedido = (req.query && req.query.rol) === 'tutor' ? 'tutor' : 'profesor';
+        const lista = await getPreguntas(cursoPedido, rolPedido);
+        res.status(200).json({ curso: cursoPedido, rol: rolPedido, preguntas: lista });
+        return;
+      }
+
       const env = getEnv();
       const certs = await getAllCertificaciones();
       const preguntas = await getAllPreguntas();
@@ -164,9 +175,26 @@ module.exports = async function handler(req, res) {
 
       const excepciones = await getAllExcepciones();
 
+      // Antes aca viajaba 'preguntas' entero: TODAS las preguntas de TODAS las
+      // evaluaciones (un centenar de combinaciones curso+rol, con sus opciones),
+      // solo para dibujar la tabla de certificaciones - que ni siquiera muestra
+      // preguntas. De todo eso la pantalla usaba unicamente las CLAVES, para
+      // saber que cursos tienen evaluacion cargada; el contenido lo necesita
+      // solo el modal de "Gestionar preguntas", y de a un curso por vez, que ya
+      // lo pide aparte.
+      //
+      // Era la lectura mas pesada del tablero y se repetia en cada apertura de
+      // la pestaña. Ahora se manda solo la lista de claves y cuantas preguntas
+      // tiene cada una (preguntasResumen), que es lo que hace falta para
+      // decidir que mostrar.
+      const preguntasResumen = {};
+      Object.keys(preguntas || {}).forEach(k => {
+        preguntasResumen[k] = Array.isArray(preguntas[k]) ? preguntas[k].length : 0;
+      });
+
       res.status(200).json({
         certificaciones: certsConSemaforo,
-        preguntas,
+        preguntasResumen,
         excepciones,
         ratingMinimo: RATING_MINIMO,
         diasRecencia: DIAS_RECENCIA,
