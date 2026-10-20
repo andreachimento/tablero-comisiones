@@ -3132,7 +3132,13 @@ function certCourseNames(){
   // tipicos del espanol, para que el resultado se parezca al nombre real.
   const CURSO_MINUSCULAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'en', 'para', 'con', 'a', 'al', 'o', 'u', 'e']);
   const yaPresentes = new Set(Array.from(cursos).map(c => c.trim().toLowerCase()));
-  Object.keys(CERT_RESP.preguntasResumen || {}).forEach(key => {
+  // El listado manda 'preguntasClaves' (un array de "curso|rol"). Se acepta
+  // tambien la forma vieja 'preguntasResumen' por si quedo una pestaña abierta
+  // de antes de este deploy.
+  const clavesDeEvaluaciones = Array.isArray(CERT_RESP.preguntasClaves)
+    ? CERT_RESP.preguntasClaves
+    : Object.keys(CERT_RESP.preguntasResumen || {});
+  clavesDeEvaluaciones.forEach(key => {
     const cursoLower = key.split('|')[0];
     if (!cursoLower || yaPresentes.has(cursoLower)) return;
     const cursoDisplay = cursoLower.split(' ').map((palabra, i) => {

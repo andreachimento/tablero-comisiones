@@ -17,7 +17,7 @@
 // ============================================================================
 
 const { getOverlay, setOverlay, personKey, getAccountsForPerson } = require('../lib/overlay');
-const { getAllCertificaciones, saveCertificacion, getAllPreguntas, getPreguntas, savePreguntas, genId, getAllExcepciones, addExcepcion, quitarExcepcion } = require('../lib/certificaciones');
+const { getAllCertificaciones, saveCertificacion, getPreguntasClaves, getPreguntas, savePreguntas, genId, getAllExcepciones, addExcepcion, quitarExcepcion } = require('../lib/certificaciones');
 const { getPostHogRatings } = require('../lib/posthog');
 const { enviarMailCertificacionAprobada, enviarMailCertificacionDesaprobada } = require('../lib/loops');
 const { empujarCertificacionAlBO } = require('../lib/certificacionesBO');
@@ -155,7 +155,7 @@ module.exports = async function handler(req, res) {
 
       const env = getEnv();
       const certs = await getAllCertificaciones();
-      const preguntas = await getAllPreguntas();
+      const preguntasClaves = await getPreguntasClaves();
 
       const pendientes = certs.filter(c => c.estado === 'pendiente');
       const keysUnicas = Array.from(new Set(pendientes.map(c => personKey(c.email))));
@@ -175,26 +175,20 @@ module.exports = async function handler(req, res) {
 
       const excepciones = await getAllExcepciones();
 
-      // Antes aca viajaba 'preguntas' entero: TODAS las preguntas de TODAS las
-      // evaluaciones (un centenar de combinaciones curso+rol, con sus opciones),
-      // solo para dibujar la tabla de certificaciones - que ni siquiera muestra
-      // preguntas. De todo eso la pantalla usaba unicamente las CLAVES, para
-      // saber que cursos tienen evaluacion cargada; el contenido lo necesita
-      // solo el modal de "Gestionar preguntas", y de a un curso por vez, que ya
-      // lo pide aparte.
+      // Antes aca se bajaba el banco entero: TODAS las preguntas de TODAS las
+      // evaluaciones (un centenar de combinaciones curso+rol, con sus
+      // opciones), solo para dibujar la tabla de certificaciones - que ni
+      // siquiera muestra preguntas. De todo eso la pantalla usa unicamente las
+      // CLAVES, para saber que cursos tienen evaluacion cargada; el contenido
+      // lo necesita solo el modal de "Gestionar preguntas", y de a un curso por
+      // vez, que ya lo pide aparte (ver el GET con ?curso= de mas arriba).
       //
       // Era la lectura mas pesada del tablero y se repetia en cada apertura de
-      // la pestaña. Ahora se manda solo la lista de claves y cuantas preguntas
-      // tiene cada una (preguntasResumen), que es lo que hace falta para
-      // decidir que mostrar.
-      const preguntasResumen = {};
-      Object.keys(preguntas || {}).forEach(k => {
-        preguntasResumen[k] = Array.isArray(preguntas[k]) ? preguntas[k].length : 0;
-      });
-
+      // la pestaña. Ahora se le pide a la base solo los nombres (hkeys), que es
+      // lo unico que hace falta.
       res.status(200).json({
         certificaciones: certsConSemaforo,
-        preguntasResumen,
+        preguntasClaves,
         excepciones,
         ratingMinimo: RATING_MINIMO,
         diasRecencia: DIAS_RECENCIA,

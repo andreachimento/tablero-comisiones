@@ -185,6 +185,54 @@ async function fetchUsers(userIds, env) {
   return Object.fromEntries(entries);
 }
 
+// ---------------------------------------------------------------------------
+// Contador de postulantes por comision (la columna "Postulantes")
+// ---------------------------------------------------------------------------
+// Antes esto bajaba de la base la lista COMPLETA de postulaciones -un par de
+// MB- en cada apertura de esta pestaña, que es la mas usada del tablero, solo
+// para contar cuantas tiene cada comision y pintar un numerito. Era de lejos
+// lo que mas bandwidth gastaba, y fue lo que dejo la base sin cuota en
+// octubre (ver el comentario de los relojes en index.html).
+//
+// Ahora se guarda el resultado YA CONTADO en una clave chica (unos pocos KB:
+// id de comision -> numero) y se recalcula como mucho una vez cada
+// CONTEO_CACHE_MS, sin importar cuanta gente tenga el tablero abierto. Si
+// entraron postulaciones nuevas en esta misma carga, se recalcula igual, asi
+// el numerito no queda viejo justo cuando cambia.
+const CONTEO_POSTULANTES_KEY = 'postulaciones:conteo-por-comision';
+const CONTEO_CACHE_MS = 15 * 60 * 1000;
+
+async function contarPostulantesPorComision(opts, forzar) {
+  let redis = null;
+  try { redis = getRedisSeguro(); } catch (e) { /* sin base: se cuenta en vivo */ }
+
+  if (redis && !forzar) {
+    try {
+      const c = await redis.get(CONTEO_POSTULANTES_KEY);
+      const ts = c && c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
+      if (c && c.conteo && Date.now() - ts < CONTEO_CACHE_MS) return c.conteo;
+    } catch (e) { /* si no se pudo leer el cache, se recalcula */ }
+  }
+
+  const { getPostulacionesCombinadas } = require('../lib/postulacionesBO');
+  const todas = await getPostulacionesCombinadas(opts);
+  const conteo = {};
+  todas.forEach(p => {
+    if (!p || !p.cohortId) return;
+    conteo[p.cohortId] = (conteo[p.cohortId] || 0) + 1;
+  });
+
+  if (redis) {
+    try { await redis.set(CONTEO_POSTULANTES_KEY, { updatedAt: new Date().toISOString(), conteo }); } catch (e) { /* si no se pudo guardar, la proxima carga vuelve a contar */ }
+  }
+  return conteo;
+}
+
+function getRedisSeguro() {
+  const { getRedis } = require('../lib/redis');
+  return getRedis();
+}
+
 async function buildRows() {
   const env = getEnv();
 
@@ -199,9 +247,13 @@ async function buildRows() {
   // que una vez por dia - abrir esta pestaña (la que mas se abre) hace de
   // "gatillo" en su lugar. Si falla (Google Sheets caido, faltan las
   // Environment Variables, etc.) no debe romper el resto del tablero.
+  let huboPostulacionesNuevas = false;
   try {
     const { ensureFreshSync } = require('../lib/postulacionesSync');
-    await ensureFreshSync();
+    const r = await ensureFreshSync();
+    // Si de verdad sincronizo (no salteo por estar fresco), los contadores
+    // cacheados mas abajo quedaron viejos y hay que recalcularlos.
+    huboPostulacionesNuevas = !!(r && r.skipped === false);
   } catch (e) {
     // No debe romper el resto del tablero, pero SI se anota en los logs de
     // Vercel (Project > Logs) para poder ver por que no esta sincronizando -
@@ -221,12 +273,10 @@ async function buildRows() {
 
   let postulantesCountByCohort = {};
   try {
-    const { getPostulacionesCombinadas } = require('../lib/postulacionesBO');
-    const todasPostulaciones = await getPostulacionesCombinadas({ assignments, cohorts, productTitle: products });
-    todasPostulaciones.forEach(p => {
-      if (!p.cohortId) return;
-      postulantesCountByCohort[p.cohortId] = (postulantesCountByCohort[p.cohortId] || 0) + 1;
-    });
+    postulantesCountByCohort = await contarPostulantesPorComision(
+      { assignments, cohorts, productTitle: products },
+      huboPostulacionesNuevas
+    );
   } catch (e) { /* si Redis o el back office fallan, seguimos mostrando el resto del tablero igual, sin el numerito */ }
 
   const cohortIds = new Set(cohorts.map(c => c.id));
