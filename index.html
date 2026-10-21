@@ -3607,7 +3607,11 @@ async function importarPreguntasDesdeArchivo(inputEl){
     for(const rol of roles){
       setStatus('Procesando ' + (i + 1) + '/' + totalCursos + ': ' + c.curso + ' [' + rol + ']...');
       const key = preguntasKeyFor(c.curso, rol);
-      const existentes = await cargarPreguntasDe(curso, rol);
+      // OJO: c.curso, no curso. Aca habia un bug: se pasaba una variable que
+      // no existe, con lo cual la importacion se cortaba en el primer curso
+      // sin decir nada (el ReferenceError mataba la funcion antes de que
+      // llegara a escribir el estado en pantalla).
+      const existentes = await cargarPreguntasDe(c.curso, rol);
 
       for(const p of existentes){
         try {
