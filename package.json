@@ -4,6 +4,11 @@
   "private": true,
   "description": "Tablero de comisiones de Coderhouse (Vercel)",
   "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@neondatabase/serverless": "^1.2.0",
     "@upstash/redis": "^1.38.2"
+  },
+  "devDependencies": {
+    "pg": "^8.23.1"
   }
 }
